@@ -1,109 +1,157 @@
-# my-language
+# My Language
 
-A Python-inspired programming language being built from scratch in C.
+A Python-inspired language project written in C, built with the long-term goal of becoming a usable everyday language for my own workflow.
+
+This project is not meant to be a toy parser or a throwaway syntax experiment. The goal is to build a real language/runtime with Python-like semantics, a clean internal architecture, and a minimal native C bridge for machine-facing capabilities that higher-level libraries can be built on top of later.
+
+---
 
 ## Vision
 
-The long-term goal of **my-language** is to create a usable everyday language with Python-style semantics, readable syntax, and direct low-level extensibility through a native C runtime layer.
+The long-term goal is to create a language that:
 
-This project is not meant to be a toy parser. It is being built as a real foundation that can grow into:
+- Feels familiar and productive like Python
+- Preserves Python-style classes and core semantics
+- Allows alternate surface syntax only when it maps 1:1 to the same meaning
+- Is implemented in C so the runtime and low-level behavior stay fully under control
+- Exposes a minimal native layer for core capabilities like memory/runtime primitives, timing, files, input, graphics/windowing, and other foundational machine-facing systems
+- Can eventually power its own editor / IDE-like environment for everyday use
 
-* A full interpreter/runtime
-* Custom standard libraries
-* Native machine-facing modules
-* Graphics / input / file system capabilities
-* A dedicated editor / IDE experience
-* Alternate surface syntax with Python-equivalent meaning
+This is meant to grow into something I would genuinely want to use, not just something that parses code for demonstration.
+
+---
 
 ## Current Status
 
-Early frontend foundation complete.
+Frontend foundation complete. Initial runtime execution has begun.
 
-Current implemented systems:
+### Implemented frontend systems
 
-* Lexer / tokenizer
-* Indentation-aware block tokens (`INDENT` / `DEDENT`)
-* Expressions with operator precedence
-* Variables / assignment parsing
-* Function definitions
-* Class definitions
-* `if / elif / else`
-* `while`
-* `for ... in`
-* Function calls
-* Member access (`object.value`, `object.method()`)
-* AST generation
-* AST debug printing
+- Lexer / tokenizer
+- Indentation-aware block tokens (`INDENT` / `DEDENT`)
+- Expressions with operator precedence
+- Variables / assignment parsing
+- Function definitions
+- Class definitions
+- `if / elif / else`
+- `while`
+- `for ... in`
+- Function calls
+- Member access (`object.value`, `object.method()`)
+- AST generation
+- AST debug printing
+
+### Implemented runtime systems
+
+- Runtime value representation
+- Variable environments
+- Expression evaluation for literals / identifiers / grouping
+- Unary operators (`-`, `not`)
+- Binary arithmetic
+- Comparisons
+- Logical operators
+- Assignment execution
+- `if / else` execution
+- `while` execution
+- `return` / `break` / `continue` control-flow signaling
+
+At the current stage, the language can successfully execute simple programs involving variables, arithmetic, reassignment, branching, and loops.
+
+---
 
 ## Project Structure
 
-```text
-main.c      - Entry point / pipeline driver
-lexer.c     - Tokenization
-lexer.h
+    main.c        - Entry point / pipeline driver
 
-parser.c    - Syntax parsing
-parser.h
+    lexer.c       - Tokenization
+    lexer.h
 
-ast.c       - AST utilities / printing
-ast.h
+    parser.c      - Syntax parsing
+    parser.h
 
-token.h     - Shared token definitions
+    ast.c         - AST utilities / printing / cleanup
+    ast.h
 
-CMakeLists.txt
-```
+    runtime.c     - Runtime execution engine
+    runtime.h
 
-## Example Syntax
+    value.c       - Runtime values
+    value.h
 
-```python
-x = 5
-y = x + 10
+    env.c         - Variable environments / scope storage
+    env.h
 
-def add(a, b):
-    return a + b
+    builtins.c    - Builtin registration
+    builtins.h
 
-class Counter:
-    def tick(self):
-        self.value = self.value + 1
+    token.h       - Shared token definitions
 
-if x > 0:
-    print(x)
-else:
-    print(0)
-```
+    CMakeLists.txt
 
-## Build
-
-Using CMake:
-
-```bash
-mkdir build
-cd build
-cmake ..
-cmake --build .
-```
+---
 
 ## Current Phase
 
-Frontend architecture cleanup complete.
+Frontend architecture complete. Initial runtime execution layer in progress.
 
-Next likely milestones:
+### Current runtime milestone
 
-* Runtime / execution engine
-* Variables and environments
-* Function execution
-* Class instances / objects
-* Imports / modules
-* Native C bridge
-* Editor / IDE tooling
+- Execute simple programs correctly
+- Prove expression evaluation
+- Prove variable mutation
+- Prove branching and loop execution
 
-## Philosophy
+### Next likely milestones
 
-Build clean systems first.
-Own the stack.
-Keep it expandable.
-Make it real.
+- Builtin function calls (`print`, etc.)
+- User-defined function execution
+- Function-local scope / call frames
+- Class instances / objects
+- Member access execution
+- Member assignment
+- `for ... in` execution
+- Imports / modules
+- Native C bridge
+- Editor / IDE tooling
 
-## Author
+---
 
-Reece Gilbert
+## Design Direction
+
+This project is being built in layers:
+
+1. Frontend foundations  
+   Lexer, parser, AST, syntax structure
+
+2. Runtime core  
+   Values, environments, execution, control flow
+
+3. Language usability  
+   Functions, objects, builtins, modules
+
+4. Native substrate  
+   Low-level C bridge for machine-facing systems
+
+5. Everyday workflow tooling  
+   Editor / IDE-like environment, libraries, and practical usability
+
+The priority is a strong core and clean architecture first, rather than rushing surface-level features.
+
+---
+
+## Why This Exists
+
+A lot of languages share similar core ideas with different syntax wrapped around them. This project comes from wanting something that keeps the productivity and semantics I like, while also giving me more direct control over the runtime and the system underneath it.
+
+The end goal is not just “a language that looks different.”  
+The end goal is a language I would actually choose to use.
+
+---
+
+## Build
+
+Example CMake build flow:
+
+```bash
+cmake -S . -B build
+cmake --build build
