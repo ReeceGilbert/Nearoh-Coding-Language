@@ -8,15 +8,14 @@
 // FRONT-END / LEXER DRIVER
 //
 // Current contract:
-// - lexes the existing Python-like token set from token_shared.h
+// - lexes the Python-like token set from token_shared.h
 // - preserves Python-style INDENT / DEDENT semantics
 // - feeds parseTokens(TokenArray*)
-// - prints tokens + AST for debugging
+// - prints source, tokens, AST, and diagnostics for debugging
 //
-// This file is intentionally written to be a clean front-end stage
-// instead of a one-off lexer demo. It does NOT fake unsupported
-// syntax such as { }, ++, --, +=, etc. Those belong in the token
-// contract first.
+// This is intentionally a clean front-end stage, not a fake
+// "supports everything" lexer demo. Unsupported syntax belongs
+// in the token contract first.
 // ============================================================
 
 // ============================================================
@@ -122,7 +121,8 @@ static char* readEntireFile(const char* path) {
 
     if (bytesRead != (size_t)fileSize) {
         free(buffer);
-        fprintf(stderr, "Failed to read entire file. Read %zu of %ld bytes.\n",
+        fprintf(stderr,
+                "Failed to read entire file. Read %zu of %ld bytes.\n",
                 bytesRead, fileSize);
         return NULL;
     }
@@ -136,31 +136,31 @@ static char* readEntireFile(const char* path) {
 // ============================================================
 
 typedef struct {
-    // source
+    // Source
     const char* source;
 
-    // token bounds / scan cursor
+    // Token bounds / scan cursor
     const char* start;
     const char* current;
 
-    // current physical source position
+    // Current physical source position
     int line;
     int column;
     int offset;
 
-    // cached token start position
+    // Cached token start position
     int tokenLine;
     int tokenColumn;
     int tokenOffset;
 
-    // indentation tracking for Python-style blocks
+    // Python-style indentation tracking
     int indentStack[MAX_INDENTS];
     int indentCount;
     int pendingDedents;
 
-    // lexer state
+    // Lexer state
     int atLineStart;   // true when next token begins a logical line
-    int groupDepth;    // suppress NEWLINE/INDENT/DEDENT inside (), []
+    int groupDepth;    // suppress NEWLINE / INDENT / DEDENT inside (), []
 
     Diagnostics* diagnostics;
 } Scanner;
@@ -205,7 +205,9 @@ static char peekChar(Scanner* scanner) {
 }
 
 static char peekNextChar(Scanner* scanner) {
-    if (isAtEnd(scanner) || scanner->current[1] == '\0') return '\0';
+    if (isAtEnd(scanner) || scanner->current[1] == '\0') {
+        return '\0';
+    }
     return scanner->current[1];
 }
 
@@ -249,47 +251,73 @@ static void syncSyntheticTokenPos(Scanner* scanner) {
 // TOKEN CREATION
 // ============================================================
 
-static Token makeToken(Scanner* scanner, TokenType type) {
+static Token buildToken(
+    Scanner* scanner,
+    TokenType type,
+    const char* start,
+    int length,
+    int line,
+    int column,
+    int offset
+) {
     Token token;
     token.type = type;
-    token.start = scanner->start;
-    token.length = (int)(scanner->current - scanner->start);
-    token.line = scanner->tokenLine;
-    token.column = scanner->tokenColumn;
-    token.offset = scanner->tokenOffset;
+    token.start = start;
+    token.length = length;
+    token.line = line;
+    token.column = column;
+    token.offset = offset;
     return token;
+}
+
+static Token makeToken(Scanner* scanner, TokenType type) {
+    return buildToken(
+        scanner,
+        type,
+        scanner->start,
+        (int)(scanner->current - scanner->start),
+        scanner->tokenLine,
+        scanner->tokenColumn,
+        scanner->tokenOffset
+    );
 }
 
 static Token makeSyntheticToken(Scanner* scanner, TokenType type) {
-    Token token;
-    token.type = type;
-    token.start = scanner->current;
-    token.length = 0;
-    token.line = scanner->tokenLine;
-    token.column = scanner->tokenColumn;
-    token.offset = scanner->tokenOffset;
-    return token;
+    return buildToken(
+        scanner,
+        type,
+        scanner->current,
+        0,
+        scanner->tokenLine,
+        scanner->tokenColumn,
+        scanner->tokenOffset
+    );
 }
 
 static Token errorToken(Scanner* scanner, const char* message) {
-    Token token;
     int len = 0;
 
-    while (message[len] != '\0') len++;
+    while (message[len] != '\0') {
+        len++;
+    }
 
-    reportLexerError(scanner->diagnostics,
-                     scanner->tokenLine,
-                     scanner->tokenColumn,
-                     scanner->tokenOffset,
-                     message);
+    reportLexerError(
+        scanner->diagnostics,
+        scanner->tokenLine,
+        scanner->tokenColumn,
+        scanner->tokenOffset,
+        message
+    );
 
-    token.type = TOKEN_ERROR;
-    token.start = message;
-    token.length = len;
-    token.line = scanner->tokenLine;
-    token.column = scanner->tokenColumn;
-    token.offset = scanner->tokenOffset;
-    return token;
+    return buildToken(
+        scanner,
+        TOKEN_ERROR,
+        message,
+        len,
+        scanner->tokenLine,
+        scanner->tokenColumn,
+        scanner->tokenOffset
+    );
 }
 
 // ============================================================
@@ -324,7 +352,9 @@ static int stringsEqual(const char* a, int aLen, const char* b) {
     int i = 0;
 
     while (b[i] != '\0') {
-        if (i >= aLen || a[i] != b[i]) return 0;
+        if (i >= aLen || a[i] != b[i]) {
+            return 0;
+        }
         i++;
     }
 
@@ -383,7 +413,9 @@ static void skipComment(Scanner* scanner) {
 }
 
 static void skipLeadingWhitespaceOnCurrentLine(Scanner* scanner) {
-    while (peekChar(scanner) == ' ' || peekChar(scanner) == '\t' || peekChar(scanner) == '\r') {
+    while (peekChar(scanner) == ' ' ||
+           peekChar(scanner) == '\t' ||
+           peekChar(scanner) == '\r') {
         advanceChar(scanner);
     }
 }
@@ -410,8 +442,8 @@ Handles indentation only when:
 - not inside grouping constructs
 - the line is not blank/comment-only
 
-Emits at most one INDENT/DEDENT per call.
-If multiple DEDENTs are needed, the extras are queued.
+Emits at most one INDENT or DEDENT per call.
+If multiple DEDENTs are needed, extras are queued.
 */
 static int handleIndentation(Scanner* scanner, Token* outToken) {
     const char* probe;
@@ -423,8 +455,7 @@ static int handleIndentation(Scanner* scanner, Token* outToken) {
 
     probe = scanner->current;
     while (*probe == ' ' || *probe == '\t') {
-        if (*probe == ' ') indent += 1;
-        else indent += TAB_WIDTH;
+        indent += (*probe == ' ') ? 1 : TAB_WIDTH;
         probe++;
     }
 
@@ -570,16 +601,27 @@ static Token scanOperatorOrPunctuation(Scanner* scanner, char c) {
             return makeToken(scanner, TOKEN_PERCENT);
 
         case '=':
-            return makeToken(scanner, matchChar(scanner, '=') ? TOKEN_EQUAL_EQUAL : TOKEN_EQUAL);
+            return makeToken(
+                scanner,
+                matchChar(scanner, '=') ? TOKEN_EQUAL_EQUAL : TOKEN_EQUAL
+            );
 
         case '<':
-            return makeToken(scanner, matchChar(scanner, '=') ? TOKEN_LESS_EQUAL : TOKEN_LESS);
+            return makeToken(
+                scanner,
+                matchChar(scanner, '=') ? TOKEN_LESS_EQUAL : TOKEN_LESS
+            );
 
         case '>':
-            return makeToken(scanner, matchChar(scanner, '=') ? TOKEN_GREATER_EQUAL : TOKEN_GREATER);
+            return makeToken(
+                scanner,
+                matchChar(scanner, '=') ? TOKEN_GREATER_EQUAL : TOKEN_GREATER
+            );
 
         case '!':
-            if (matchChar(scanner, '=')) return makeToken(scanner, TOKEN_NOT_EQUAL);
+            if (matchChar(scanner, '=')) {
+                return makeToken(scanner, TOKEN_NOT_EQUAL);
+            }
             return errorToken(scanner, "Unexpected character '!'. Use 'not' or '!='");
     }
 
@@ -591,7 +633,9 @@ static Token scanOperatorOrPunctuation(Scanner* scanner, char c) {
 // ============================================================
 
 static int emitPendingDedent(Scanner* scanner, Token* outToken) {
-    if (scanner->pendingDedents <= 0) return 0;
+    if (scanner->pendingDedents <= 0) {
+        return 0;
+    }
 
     syncSyntheticTokenPos(scanner);
     scanner->pendingDedents--;
@@ -600,7 +644,9 @@ static int emitPendingDedent(Scanner* scanner, Token* outToken) {
 }
 
 static int emitEOFOrTrailingDedent(Scanner* scanner, Token* outToken) {
-    if (!isAtEnd(scanner)) return 0;
+    if (!isAtEnd(scanner)) {
+        return 0;
+    }
 
     if (scanner->indentCount > 1) {
         scanner->indentCount--;
@@ -616,7 +662,9 @@ static int emitEOFOrTrailingDedent(Scanner* scanner, Token* outToken) {
 
 static void skipIgnoredInput(Scanner* scanner) {
     for (;;) {
-        if (isAtEnd(scanner)) return;
+        if (isAtEnd(scanner)) {
+            return;
+        }
 
         if (scanner->atLineStart &&
             scanner->groupDepth == 0 &&
@@ -628,7 +676,9 @@ static void skipIgnoredInput(Scanner* scanner) {
         markTokenStart(scanner);
 
         if (!(scanner->atLineStart && scanner->groupDepth == 0)) {
-            if (peekChar(scanner) == ' ' || peekChar(scanner) == '\t' || peekChar(scanner) == '\r') {
+            if (peekChar(scanner) == ' ' ||
+                peekChar(scanner) == '\t' ||
+                peekChar(scanner) == '\r') {
                 skipInlineWhitespace(scanner);
                 continue;
             }
@@ -672,7 +722,7 @@ static Token scanSingleToken(Scanner* scanner) {
 /*
 Order:
 1. emit queued DEDENTs
-2. emit EOF/trailing DEDENTs
+2. emit EOF / trailing DEDENTs
 3. skip ignored input
 4. handle indentation
 5. suppress physical newlines inside grouping
@@ -733,14 +783,14 @@ static void lexAllTokens(Scanner* scanner, TokenArray* outTokens) {
 // ============================================================
 
 /*
-This is intentionally a no-op right now.
+Intentionally a no-op for now.
 
-Later, when you expand token_shared.h, this becomes the place to:
-- map brace blocks to canonical block tokens
+Later, once token_shared.h expands, this becomes the place to:
+- map brace blocks into canonical block tokens
 - lower ++ / -- / += / etc.
 - normalize alternate surface syntax into Python-first semantics
 
-For now it preserves the existing token stream unchanged.
+For now it preserves the token stream unchanged.
 */
 static void normalizeTokens(TokenArray* tokens) {
     (void)tokens;
