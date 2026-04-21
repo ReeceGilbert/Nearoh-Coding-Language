@@ -23,7 +23,7 @@ This is meant to grow into something I would genuinely want to use, not just som
 
 ## Current Status
 
-Frontend foundation complete. Initial runtime execution has begun.
+Frontend foundation complete. Runtime core now functional and executing real programs.
 
 ### Implemented frontend systems
 
@@ -43,6 +43,8 @@ Frontend foundation complete. Initial runtime execution has begun.
 
 ### Implemented runtime systems
 
+#### Core execution
+
 - Runtime value representation
 - Variable environments
 - Expression evaluation for literals / identifiers / grouping
@@ -55,7 +57,24 @@ Frontend foundation complete. Initial runtime execution has begun.
 - `while` execution
 - `return` / `break` / `continue` control-flow signaling
 
-At the current stage, the language can successfully execute simple programs involving variables, arithmetic, reassignment, branching, and loops.
+#### Functions
+
+- Builtin function calls (`print`)
+- User-defined function execution
+- Parameters
+- Return values
+- Function-local scope / call frames
+
+#### Classes / Objects
+
+- Class definitions
+- Class instantiation
+- Instance field assignment
+- Instance field access
+- Methods
+- Automatic bound `self`
+
+At the current stage, the language can successfully execute programs involving variables, arithmetic, reassignment, branching, loops, functions, classes, objects, member access, and methods.
 
 ---
 
@@ -92,25 +111,30 @@ At the current stage, the language can successfully execute simple programs invo
 
 ## Current Phase
 
-Frontend architecture complete. Initial runtime execution layer in progress.
+Frontend architecture complete. Working runtime foundation established.
 
 ### Current runtime milestone
 
-- Execute simple programs correctly
+- Execute real programs correctly
 - Prove expression evaluation
 - Prove variable mutation
 - Prove branching and loop execution
-
-### Next likely milestones
-
-- Builtin function calls (`print`, etc.)
-- User-defined function execution
+- Builtin function calls
+- User-defined functions
 - Function-local scope / call frames
 - Class instances / objects
 - Member access execution
 - Member assignment
+- Methods with bound `self`
+
+### Next likely milestones
+
+- `__init__` constructor support
+- Better runtime error messages
+- Lists / dictionaries
 - `for ... in` execution
 - Imports / modules
+- Better memory cleanup / ownership
 - Native C bridge
 - Editor / IDE tooling
 
