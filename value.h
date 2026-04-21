@@ -10,9 +10,11 @@ typedef struct Runtime Runtime;
 typedef struct Value Value;
 typedef struct NativeFunction NativeFunction;
 typedef struct FunctionObject FunctionObject;
+typedef struct MethodEntry MethodEntry;
 typedef struct ClassObject ClassObject;
 typedef struct InstanceField InstanceField;
 typedef struct InstanceObject InstanceObject;
+typedef struct BoundMethodObject BoundMethodObject;
 
 struct FunctionObject {
     char* name;
@@ -22,10 +24,18 @@ struct FunctionObject {
     Environment* closure;
 };
 
+struct MethodEntry {
+    char* name;
+    FunctionObject* function;
+};
+
 struct ClassObject {
     char* name;
     AstNode* body;
     Environment* closure;
+    MethodEntry* methods;
+    int methodCount;
+    int methodCapacity;
 };
 
 typedef enum {
@@ -36,7 +46,8 @@ typedef enum {
     VAL_NATIVE_FUNCTION,
     VAL_FUNCTION,
     VAL_CLASS,
-    VAL_INSTANCE
+    VAL_INSTANCE,
+    VAL_BOUND_METHOD
 } ValueType;
 
 struct Value {
@@ -49,6 +60,7 @@ struct Value {
         FunctionObject* function;
         ClassObject* classObject;
         InstanceObject* instance;
+        BoundMethodObject* boundMethod;
     } as;
 };
 
@@ -70,6 +82,11 @@ struct InstanceObject {
     int fieldCapacity;
 };
 
+struct BoundMethodObject {
+    InstanceObject* receiver;
+    FunctionObject* method;
+};
+
 Value makeNone(void);
 Value makeBool(int boolean);
 Value makeNumber(double number);
@@ -80,6 +97,7 @@ Value makeNativeFunction(NativeFunction* nativeFunction);
 Value makeFunction(FunctionObject* function);
 Value makeClass(ClassObject* classObject);
 Value makeInstance(InstanceObject* instance);
+Value makeBoundMethod(BoundMethodObject* boundMethod);
 
 void freeValue(Value* value);
 Value copyValue(const Value* value);

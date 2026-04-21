@@ -81,6 +81,13 @@ Value makeInstance(InstanceObject* instance) {
     return v;
 }
 
+Value makeBoundMethod(BoundMethodObject* boundMethod) {
+    Value v;
+    v.type = VAL_BOUND_METHOD;
+    v.as.boundMethod = boundMethod;
+    return v;
+}
+
 void freeValue(Value* value) {
     if (value == NULL) {
         return;
@@ -124,6 +131,9 @@ Value copyValue(const Value* value) {
         case VAL_INSTANCE:
             return makeInstance(value->as.instance);
 
+        case VAL_BOUND_METHOD:
+            return makeBoundMethod(value->as.boundMethod);
+
         default:
             return makeNone();
     }
@@ -151,6 +161,7 @@ int valueIsTruthy(const Value* value) {
         case VAL_FUNCTION:
         case VAL_CLASS:
         case VAL_INSTANCE:
+        case VAL_BOUND_METHOD:
             return 1;
 
         default:
@@ -195,6 +206,9 @@ int valueEquals(const Value* a, const Value* b) {
         case VAL_INSTANCE:
             return a->as.instance == b->as.instance;
 
+        case VAL_BOUND_METHOD:
+            return a->as.boundMethod == b->as.boundMethod;
+
         default:
             return 0;
     }
@@ -229,6 +243,9 @@ const char* valueTypeName(const Value* value) {
 
         case VAL_INSTANCE:
             return "instance";
+
+        case VAL_BOUND_METHOD:
+            return "bound_method";
 
         default:
             return "unknown";
@@ -289,6 +306,16 @@ void printValue(const Value* value) {
                 printf("<%s instance>", value->as.instance->classObject->name);
             } else {
                 printf("<instance>");
+            }
+            break;
+
+        case VAL_BOUND_METHOD:
+            if (value->as.boundMethod != NULL &&
+                value->as.boundMethod->method != NULL &&
+                value->as.boundMethod->method->name != NULL) {
+                printf("<bound method %s>", value->as.boundMethod->method->name);
+            } else {
+                printf("<bound method>");
             }
             break;
 

@@ -84,9 +84,105 @@ static FunctionObject* createFunctionObject(Runtime* runtime, AstNode* node) {
     return function;
 }
 
+static int ensureMethodCapacity(ClassObject* classObject) {
+    MethodEntry* newMethods;
+    int newCapacity;
+
+    if (classObject == NULL) {
+        return 0;
+    }
+
+    if (classObject->methodCount < classObject->methodCapacity) {
+        return 1;
+    }
+
+    newCapacity = (classObject->methodCapacity < 8) ? 8 : classObject->methodCapacity * 2;
+    newMethods = (MethodEntry*)realloc(classObject->methods, sizeof(MethodEntry) * (size_t)newCapacity);
+    if (newMethods == NULL) {
+        return 0;
+    }
+
+    classObject->methods = newMethods;
+    classObject->methodCapacity = newCapacity;
+    return 1;
+}
+
+static int classAddMethod(Runtime* runtime, ClassObject* classObject, FunctionObject* function) {
+    char* nameCopy;
+
+    if (classObject == NULL || function == NULL || function->name == NULL) {
+        runtimeError(runtime, "Invalid method while building class.");
+        return 0;
+    }
+
+    if (!ensureMethodCapacity(classObject)) {
+        runtimeError(runtime, "Out of memory while growing class methods.");
+        return 0;
+    }
+
+    nameCopy = (char*)malloc(strlen(function->name) + 1);
+    if (nameCopy == NULL) {
+        runtimeError(runtime, "Out of memory while storing method name.");
+        return 0;
+    }
+
+    strcpy(nameCopy, function->name);
+
+    classObject->methods[classObject->methodCount].name = nameCopy;
+    classObject->methods[classObject->methodCount].function = function;
+    classObject->methodCount++;
+    return 1;
+}
+
+static FunctionObject* classFindMethod(ClassObject* classObject, Token member) {
+    char* memberName;
+    FunctionObject* found = NULL;
+    int i;
+
+    if (classObject == NULL) {
+        return NULL;
+    }
+
+    memberName = copyTokenText(member);
+    if (memberName == NULL) {
+        return NULL;
+    }
+
+    for (i = 0; i < classObject->methodCount; i++) {
+        if (strcmp(classObject->methods[i].name, memberName) == 0) {
+            found = classObject->methods[i].function;
+            break;
+        }
+    }
+
+    free(memberName);
+    return found;
+}
+
+static BoundMethodObject* createBoundMethod(Runtime* runtime, InstanceObject* receiver, FunctionObject* method) {
+    BoundMethodObject* boundMethod;
+
+    if (receiver == NULL || method == NULL) {
+        runtimeError(runtime, "Invalid bound method creation.");
+        return NULL;
+    }
+
+    boundMethod = (BoundMethodObject*)malloc(sizeof(BoundMethodObject));
+    if (boundMethod == NULL) {
+        runtimeError(runtime, "Out of memory while creating bound method.");
+        return NULL;
+    }
+
+    boundMethod->receiver = receiver;
+    boundMethod->method = method;
+    return boundMethod;
+}
+
+
 static ClassObject* createClassObject(Runtime* runtime, AstNode* node) {
     ClassObject* classObject;
     char* nameCopy;
+    int i;
 
     if (node == NULL || node->type != AST_CLASS_DEF) {
         runtimeError(runtime, "Invalid class definition node.");
@@ -109,6 +205,26 @@ static ClassObject* createClassObject(Runtime* runtime, AstNode* node) {
     classObject->name = nameCopy;
     classObject->body = node->as.classDef.body;
     classObject->closure = runtime->current;
+    classObject->methods = NULL;
+    classObject->methodCount = 0;
+    classObject->methodCapacity = 0;
+
+    if (node->as.classDef.body != NULL && node->as.classDef.body->type == AST_BLOCK) {
+        for (i = 0; i < node->as.classDef.body->as.block.statements.count; i++) {
+            AstNode* stmt = node->as.classDef.body->as.block.statements.items[i];
+            if (stmt != NULL && stmt->type == AST_FUNCTION_DEF) {
+                FunctionObject* method = createFunctionObject(runtime, stmt);
+                if (method == NULL) {
+                    return NULL;
+                }
+
+                if (!classAddMethod(runtime, classObject, method)) {
+                    return NULL;
+                }
+            }
+        }
+    }
+
     return classObject;
 }
 
@@ -131,6 +247,93 @@ static InstanceObject* createInstanceObject(Runtime* runtime, ClassObject* class
     instance->fieldCount = 0;
     instance->fieldCapacity = 0;
     return instance;
+}
+
+static int ensureInstanceFieldCapacity(InstanceObject* instance) {
+    InstanceField* newFields;
+    int newCapacity;
+
+    if (instance == NULL) {
+        return 0;
+    }
+
+    if (instance->fieldCount < instance->fieldCapacity) {
+        return 1;
+    }
+
+    newCapacity = (instance->fieldCapacity < 8) ? 8 : instance->fieldCapacity * 2;
+    newFields = (InstanceField*)realloc(instance->fields, sizeof(InstanceField) * (size_t)newCapacity);
+    if (newFields == NULL) {
+        return 0;
+    }
+
+    instance->fields = newFields;
+    instance->fieldCapacity = newCapacity;
+    return 1;
+}
+
+static int instanceSetField(Runtime* runtime, InstanceObject* instance, Token member, Value value) {
+    char* memberName;
+    int i;
+
+    if (instance == NULL) {
+        runtimeError(runtime, "Cannot assign field on null instance.");
+        return 0;
+    }
+
+    memberName = copyTokenText(member);
+    if (memberName == NULL) {
+        runtimeError(runtime, "Out of memory while assigning member.");
+        return 0;
+    }
+
+    for (i = 0; i < instance->fieldCount; i++) {
+        if (strcmp(instance->fields[i].name, memberName) == 0) {
+            free(memberName);
+            freeValue(&instance->fields[i].value);
+            instance->fields[i].value = copyValue(&value);
+            return 1;
+        }
+    }
+
+    if (!ensureInstanceFieldCapacity(instance)) {
+        free(memberName);
+        runtimeError(runtime, "Out of memory while growing instance fields.");
+        return 0;
+    }
+
+    instance->fields[instance->fieldCount].name = memberName;
+    instance->fields[instance->fieldCount].value = copyValue(&value);
+    instance->fieldCount++;
+    return 1;
+}
+
+static int instanceGetField(Runtime* runtime, InstanceObject* instance, Token member, Value* outValue) {
+    char* memberName;
+    int i;
+
+    if (instance == NULL || outValue == NULL) {
+        runtimeError(runtime, "Cannot read field from null instance.");
+        return 0;
+    }
+
+    memberName = copyTokenText(member);
+    if (memberName == NULL) {
+        runtimeError(runtime, "Out of memory while reading member.");
+        return 0;
+    }
+
+    for (i = 0; i < instance->fieldCount; i++) {
+        if (strcmp(instance->fields[i].name, memberName) == 0) {
+            free(memberName);
+            *outValue = copyValue(&instance->fields[i].value);
+            return 1;
+        }
+    }
+
+    free(memberName);
+    runtimeError(runtime, "Undefined member.");
+    return 0;
 }
 
 static Value* evaluateArguments(Runtime* runtime, AstNodeArray* arguments, int* outCount) {
@@ -232,6 +435,38 @@ static Value callUserFunction(Runtime* runtime, FunctionObject* function, int ar
     return makeNone();
 }
 
+static Value callBoundMethod(Runtime* runtime, BoundMethodObject* boundMethod, int argCount, Value* args) {
+    Value* fullArgs;
+    Value result;
+    int i;
+
+    if (boundMethod == NULL || boundMethod->receiver == NULL || boundMethod->method == NULL) {
+        runtimeError(runtime, "Invalid bound method call.");
+        return makeNone();
+    }
+
+    fullArgs = (Value*)malloc(sizeof(Value) * (size_t)(argCount + 1));
+    if (fullArgs == NULL) {
+        runtimeError(runtime, "Out of memory while preparing bound method call.");
+        return makeNone();
+    }
+
+    fullArgs[0] = makeInstance(boundMethod->receiver);
+
+    for (i = 0; i < argCount; i++) {
+        fullArgs[i + 1] = copyValue(&args[i]);
+    }
+
+    result = callUserFunction(runtime, boundMethod->method, argCount + 1, fullArgs);
+
+    for (i = 0; i < argCount + 1; i++) {
+        freeValue(&fullArgs[i]);
+    }
+
+    free(fullArgs);
+    return result;
+}
+
 static Value evalCall(Runtime* runtime, AstNode* node) {
     Value callee;
     Value result = makeNone();
@@ -282,6 +517,10 @@ static Value evalCall(Runtime* runtime, AstNode* node) {
             result = makeInstance(instance);
             break;
         }
+
+        case VAL_BOUND_METHOD:
+            result = callBoundMethod(runtime, callee.as.boundMethod, argCount, args);
+            break;
 
         default:
             runtimeError(runtime, "Tried to call a non-callable value.");
@@ -611,8 +850,44 @@ static ExecResult executeAssign(Runtime* runtime, AstNode* node) {
         return execNormal();
     }
 
+    if (target->type == AST_MEMBER_EXPR) {
+        Value objectValue;
+        char* memberName;
+
+        objectValue = runtimeEvalExpression(runtime, target->as.memberExpr.object);
+        if (runtime->hadError) {
+            freeValue(&rhs);
+            return execError();
+        }
+
+        if (objectValue.type != VAL_INSTANCE) {
+            freeValue(&objectValue);
+            freeValue(&rhs);
+            runtimeError(runtime, "Only instances support member assignment right now.");
+            return execError();
+        }
+
+        if (!instanceSetField(runtime, objectValue.as.instance, target->as.memberExpr.member, rhs)) {
+            freeValue(&objectValue);
+            freeValue(&rhs);
+            return execError();
+        }
+
+        memberName = copyTokenText(target->as.memberExpr.member);
+        if (memberName != NULL) {
+            printf("[assign] .%s = ", memberName);
+            printValue(&rhs);
+            printf("\n");
+            free(memberName);
+        }
+
+        freeValue(&objectValue);
+        freeValue(&rhs);
+        return execNormal();
+    }
+
     freeValue(&rhs);
-    runtimeError(runtime, "Only identifier assignment is supported right now.");
+    runtimeError(runtime, "Only identifier or member assignment is supported right now.");
     return execError();
 }
 
@@ -704,9 +979,47 @@ Value runtimeEvalExpression(Runtime* runtime, AstNode* node) {
         case AST_CALL_EXPR:
             return evalCall(runtime, node);
 
-        case AST_MEMBER_EXPR:
-            runtimeError(runtime, "Member access is not supported yet.");
+        case AST_MEMBER_EXPR: {
+            Value objectValue;
+            Value memberValue;
+            FunctionObject* method;
+            BoundMethodObject* boundMethod;
+
+            objectValue = runtimeEvalExpression(runtime, node->as.memberExpr.object);
+            if (runtime->hadError) {
+                return makeNone();
+            }
+
+            if (objectValue.type != VAL_INSTANCE) {
+                freeValue(&objectValue);
+                runtimeError(runtime, "Only instances support member access right now.");
+                return makeNone();
+            }
+
+            if (instanceGetField(runtime, objectValue.as.instance, node->as.memberExpr.member, &memberValue)) {
+                freeValue(&objectValue);
+                return memberValue;
+            }
+
+            runtime->hadError = 0;
+            runtime->errorMessage[0] = '\0';
+
+            method = classFindMethod(objectValue.as.instance->classObject, node->as.memberExpr.member);
+            if (method != NULL) {
+                boundMethod = createBoundMethod(runtime, objectValue.as.instance, method);
+                freeValue(&objectValue);
+
+                if (boundMethod == NULL) {
+                    return makeNone();
+                }
+
+                return makeBoundMethod(boundMethod);
+            }
+
+            freeValue(&objectValue);
+            runtimeError(runtime, "Undefined member.");
             return makeNone();
+        }
 
         default:
             runtimeError(runtime, "Unsupported expression node.");
