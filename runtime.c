@@ -1,5 +1,6 @@
 #include "runtime.h"
 #include "builtins.h"
+#include "env.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,29 +17,284 @@ static char* copyTokenText(Token token) {
     return text;
 }
 
-static int isNumericBinaryOperator(TokenType type) {
-    switch (type) {
-        case TOKEN_PLUS:
-        case TOKEN_MINUS:
-        case TOKEN_STAR:
-        case TOKEN_SLASH:
-        case TOKEN_PERCENT:
-        case TOKEN_LESS:
-        case TOKEN_LESS_EQUAL:
-        case TOKEN_GREATER:
-        case TOKEN_GREATER_EQUAL:
-            return 1;
-        default:
-            return 0;
-    }
-}
-
 static int requireNumberOperands(Runtime* runtime, const Value* left, const Value* right) {
     if (left->type != VAL_NUMBER || right->type != VAL_NUMBER) {
         runtimeError(runtime, "Operator requires number operands.");
         return 0;
     }
     return 1;
+}
+
+static Token* copyParameterTokens(const TokenList* list) {
+    Token* params;
+    int i;
+
+    if (list == NULL || list->count <= 0) {
+        return NULL;
+    }
+
+    params = (Token*)malloc(sizeof(Token) * (size_t)list->count);
+    if (params == NULL) {
+        return NULL;
+    }
+
+    for (i = 0; i < list->count; i++) {
+        params[i] = list->items[i];
+    }
+
+    return params;
+}
+
+static FunctionObject* createFunctionObject(Runtime* runtime, AstNode* node) {
+    FunctionObject* function;
+    char* nameCopy;
+    Token* paramsCopy;
+
+    if (node == NULL || node->type != AST_FUNCTION_DEF) {
+        runtimeError(runtime, "Invalid function definition node.");
+        return NULL;
+    }
+
+    nameCopy = copyTokenText(node->as.functionDef.name);
+    if (nameCopy == NULL) {
+        runtimeError(runtime, "Out of memory while creating function.");
+        return NULL;
+    }
+
+    paramsCopy = copyParameterTokens(&node->as.functionDef.parameters);
+    if (node->as.functionDef.parameters.count > 0 && paramsCopy == NULL) {
+        free(nameCopy);
+        runtimeError(runtime, "Out of memory while copying function parameters.");
+        return NULL;
+    }
+
+    function = (FunctionObject*)malloc(sizeof(FunctionObject));
+    if (function == NULL) {
+        free(nameCopy);
+        free(paramsCopy);
+        runtimeError(runtime, "Out of memory while creating function.");
+        return NULL;
+    }
+
+    function->name = nameCopy;
+    function->params = paramsCopy;
+    function->paramCount = node->as.functionDef.parameters.count;
+    function->body = node->as.functionDef.body;
+    function->closure = runtime->current;
+    return function;
+}
+
+static ClassObject* createClassObject(Runtime* runtime, AstNode* node) {
+    ClassObject* classObject;
+    char* nameCopy;
+
+    if (node == NULL || node->type != AST_CLASS_DEF) {
+        runtimeError(runtime, "Invalid class definition node.");
+        return NULL;
+    }
+
+    nameCopy = copyTokenText(node->as.classDef.name);
+    if (nameCopy == NULL) {
+        runtimeError(runtime, "Out of memory while creating class.");
+        return NULL;
+    }
+
+    classObject = (ClassObject*)malloc(sizeof(ClassObject));
+    if (classObject == NULL) {
+        free(nameCopy);
+        runtimeError(runtime, "Out of memory while creating class.");
+        return NULL;
+    }
+
+    classObject->name = nameCopy;
+    classObject->body = node->as.classDef.body;
+    classObject->closure = runtime->current;
+    return classObject;
+}
+
+static InstanceObject* createInstanceObject(Runtime* runtime, ClassObject* classObject) {
+    InstanceObject* instance;
+
+    if (classObject == NULL) {
+        runtimeError(runtime, "Cannot instantiate a null class.");
+        return NULL;
+    }
+
+    instance = (InstanceObject*)malloc(sizeof(InstanceObject));
+    if (instance == NULL) {
+        runtimeError(runtime, "Out of memory while creating instance.");
+        return NULL;
+    }
+
+    instance->classObject = classObject;
+    instance->fields = NULL;
+    instance->fieldCount = 0;
+    instance->fieldCapacity = 0;
+    return instance;
+}
+
+static Value* evaluateArguments(Runtime* runtime, AstNodeArray* arguments, int* outCount) {
+    Value* values;
+    int i;
+
+    *outCount = 0;
+
+    if (arguments == NULL || arguments->count <= 0) {
+        return NULL;
+    }
+
+    values = (Value*)malloc(sizeof(Value) * (size_t)arguments->count);
+    if (values == NULL) {
+        runtimeError(runtime, "Out of memory while evaluating call arguments.");
+        return NULL;
+    }
+
+    for (i = 0; i < arguments->count; i++) {
+        values[i] = runtimeEvalExpression(runtime, arguments->items[i]);
+        if (runtime->hadError) {
+            int j;
+            for (j = 0; j < i; j++) {
+                freeValue(&values[j]);
+            }
+            free(values);
+            return NULL;
+        }
+    }
+
+    *outCount = arguments->count;
+    return values;
+}
+
+static Value callUserFunction(Runtime* runtime, FunctionObject* function, int argCount, Value* args) {
+    Environment localEnv;
+    Environment* previousEnv;
+    ExecResult result;
+    Value returnValue;
+    int i;
+
+    if (function == NULL) {
+        runtimeError(runtime, "Tried to call a null function.");
+        return makeNone();
+    }
+
+    if (argCount != function->paramCount) {
+        runtimeError(runtime, "Wrong number of arguments for function call.");
+        return makeNone();
+    }
+
+    envInit(&localEnv, function->closure);
+    previousEnv = runtime->current;
+    runtime->current = &localEnv;
+
+    for (i = 0; i < function->paramCount; i++) {
+        char* paramName = copyTokenText(function->params[i]);
+        if (paramName == NULL) {
+            runtime->current = previousEnv;
+            envFree(&localEnv);
+            runtimeError(runtime, "Out of memory while binding function parameter.");
+            return makeNone();
+        }
+
+        if (!envDefine(runtime->current, paramName, args[i])) {
+            free(paramName);
+            runtime->current = previousEnv;
+            envFree(&localEnv);
+            runtimeError(runtime, "Failed to bind function parameter.");
+            return makeNone();
+        }
+
+        free(paramName);
+    }
+
+    result = runtimeExecuteNode(runtime, function->body);
+
+    runtime->current = previousEnv;
+
+    if (result.type == FLOW_RETURN) {
+        returnValue = copyValue(&result.value);
+        freeValue(&result.value);
+        envFree(&localEnv);
+        return returnValue;
+    }
+
+    if (result.type == FLOW_ERROR) {
+        envFree(&localEnv);
+        return makeNone();
+    }
+
+    if (result.type == FLOW_BREAK || result.type == FLOW_CONTINUE) {
+        envFree(&localEnv);
+        runtimeError(runtime, "break/continue used outside of loop.");
+        return makeNone();
+    }
+
+    envFree(&localEnv);
+    return makeNone();
+}
+
+static Value evalCall(Runtime* runtime, AstNode* node) {
+    Value callee;
+    Value result = makeNone();
+    Value* args = NULL;
+    int argCount = 0;
+    int i;
+
+    callee = runtimeEvalExpression(runtime, node->as.callExpr.callee);
+    if (runtime->hadError) {
+        return makeNone();
+    }
+
+    args = evaluateArguments(runtime, &node->as.callExpr.arguments, &argCount);
+    if (runtime->hadError) {
+        freeValue(&callee);
+        return makeNone();
+    }
+
+    switch (callee.type) {
+        case VAL_NATIVE_FUNCTION:
+            if (callee.as.nativeFunction == NULL || callee.as.nativeFunction->fn == NULL) {
+                runtimeError(runtime, "Invalid native function.");
+            } else if (callee.as.nativeFunction->arity >= 0 &&
+                       argCount != callee.as.nativeFunction->arity) {
+                runtimeError(runtime, "Wrong number of arguments for native function call.");
+            } else {
+                result = callee.as.nativeFunction->fn(runtime, argCount, args);
+            }
+            break;
+
+        case VAL_FUNCTION:
+            result = callUserFunction(runtime, callee.as.function, argCount, args);
+            break;
+
+        case VAL_CLASS: {
+            InstanceObject* instance;
+
+            if (argCount != 0) {
+                runtimeError(runtime, "Class instantiation does not support constructor arguments yet.");
+                break;
+            }
+
+            instance = createInstanceObject(runtime, callee.as.classObject);
+            if (runtime->hadError) {
+                break;
+            }
+
+            result = makeInstance(instance);
+            break;
+        }
+
+        default:
+            runtimeError(runtime, "Tried to call a non-callable value.");
+            break;
+    }
+
+    for (i = 0; i < argCount; i++) {
+        freeValue(&args[i]);
+    }
+
+    free(args);
+    freeValue(&callee);
+    return result;
 }
 
 static Value evalLiteral(Runtime* runtime, Token literal) {
@@ -446,8 +702,7 @@ Value runtimeEvalExpression(Runtime* runtime, AstNode* node) {
             return evalBinary(runtime, node);
 
         case AST_CALL_EXPR:
-            runtimeError(runtime, "Function calls are not supported yet.");
-            return makeNone();
+            return evalCall(runtime, node);
 
         case AST_MEMBER_EXPR:
             runtimeError(runtime, "Member access is not supported yet.");
@@ -561,13 +816,61 @@ ExecResult runtimeExecuteNode(Runtime* runtime, AstNode* node) {
             result.value = makeNone();
             return result;
 
-        case AST_FUNCTION_DEF:
-            runtimeError(runtime, "Function definitions are not supported yet.");
-            return execError();
+        case AST_FUNCTION_DEF: {
+            FunctionObject* function;
+            Value functionValue;
+            char* name;
 
-        case AST_CLASS_DEF:
-            runtimeError(runtime, "Class definitions are not supported yet.");
-            return execError();
+            function = createFunctionObject(runtime, node);
+            if (function == NULL) {
+                return execError();
+            }
+
+            functionValue = makeFunction(function);
+
+            name = copyTokenText(node->as.functionDef.name);
+            if (name == NULL) {
+                runtimeError(runtime, "Out of memory while defining function.");
+                return execError();
+            }
+
+            if (!envDefine(runtime->current, name, functionValue)) {
+                free(name);
+                runtimeError(runtime, "Failed to define function.");
+                return execError();
+            }
+
+            free(name);
+            return execNormal();
+        }
+
+        case AST_CLASS_DEF: {
+            ClassObject* classObject;
+            Value classValue;
+            char* name;
+
+            classObject = createClassObject(runtime, node);
+            if (classObject == NULL) {
+                return execError();
+            }
+
+            classValue = makeClass(classObject);
+
+            name = copyTokenText(node->as.classDef.name);
+            if (name == NULL) {
+                runtimeError(runtime, "Out of memory while defining class.");
+                return execError();
+            }
+
+            if (!envDefine(runtime->current, name, classValue)) {
+                free(name);
+                runtimeError(runtime, "Failed to define class.");
+                return execError();
+            }
+
+            free(name);
+            return execNormal();
+        }
 
         case AST_FOR_STMT:
             runtimeError(runtime, "For-loops are not supported yet.");

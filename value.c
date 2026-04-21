@@ -53,6 +53,34 @@ Value makeStringCopy(const char* string) {
     return makeStringOwned(duplicateString(string));
 }
 
+Value makeNativeFunction(NativeFunction* nativeFunction) {
+    Value v;
+    v.type = VAL_NATIVE_FUNCTION;
+    v.as.nativeFunction = nativeFunction;
+    return v;
+}
+
+Value makeFunction(FunctionObject* function) {
+    Value v;
+    v.type = VAL_FUNCTION;
+    v.as.function = function;
+    return v;
+}
+
+Value makeClass(ClassObject* classObject) {
+    Value v;
+    v.type = VAL_CLASS;
+    v.as.classObject = classObject;
+    return v;
+}
+
+Value makeInstance(InstanceObject* instance) {
+    Value v;
+    v.type = VAL_INSTANCE;
+    v.as.instance = instance;
+    return v;
+}
+
 void freeValue(Value* value) {
     if (value == NULL) {
         return;
@@ -74,12 +102,28 @@ Value copyValue(const Value* value) {
     switch (value->type) {
         case VAL_NONE:
             return makeNone();
+
         case VAL_BOOL:
             return makeBool(value->as.boolean);
+
         case VAL_NUMBER:
             return makeNumber(value->as.number);
+
         case VAL_STRING:
             return makeStringCopy(value->as.string);
+
+        case VAL_NATIVE_FUNCTION:
+            return makeNativeFunction(value->as.nativeFunction);
+
+        case VAL_FUNCTION:
+            return makeFunction(value->as.function);
+
+        case VAL_CLASS:
+            return makeClass(value->as.classObject);
+
+        case VAL_INSTANCE:
+            return makeInstance(value->as.instance);
+
         default:
             return makeNone();
     }
@@ -93,12 +137,22 @@ int valueIsTruthy(const Value* value) {
     switch (value->type) {
         case VAL_NONE:
             return 0;
+
         case VAL_BOOL:
             return value->as.boolean != 0;
+
         case VAL_NUMBER:
             return value->as.number != 0.0;
+
         case VAL_STRING:
             return value->as.string != NULL && value->as.string[0] != '\0';
+
+        case VAL_NATIVE_FUNCTION:
+        case VAL_FUNCTION:
+        case VAL_CLASS:
+        case VAL_INSTANCE:
+            return 1;
+
         default:
             return 0;
     }
@@ -116,15 +170,31 @@ int valueEquals(const Value* a, const Value* b) {
     switch (a->type) {
         case VAL_NONE:
             return 1;
+
         case VAL_BOOL:
             return a->as.boolean == b->as.boolean;
+
         case VAL_NUMBER:
             return a->as.number == b->as.number;
+
         case VAL_STRING:
             if (a->as.string == NULL || b->as.string == NULL) {
                 return a->as.string == b->as.string;
             }
             return strcmp(a->as.string, b->as.string) == 0;
+
+        case VAL_NATIVE_FUNCTION:
+            return a->as.nativeFunction == b->as.nativeFunction;
+
+        case VAL_FUNCTION:
+            return a->as.function == b->as.function;
+
+        case VAL_CLASS:
+            return a->as.classObject == b->as.classObject;
+
+        case VAL_INSTANCE:
+            return a->as.instance == b->as.instance;
+
         default:
             return 0;
     }
@@ -138,12 +208,28 @@ const char* valueTypeName(const Value* value) {
     switch (value->type) {
         case VAL_NONE:
             return "none";
+
         case VAL_BOOL:
             return "bool";
+
         case VAL_NUMBER:
             return "number";
+
         case VAL_STRING:
             return "string";
+
+        case VAL_NATIVE_FUNCTION:
+            return "native_function";
+
+        case VAL_FUNCTION:
+            return "function";
+
+        case VAL_CLASS:
+            return "class";
+
+        case VAL_INSTANCE:
+            return "instance";
+
         default:
             return "unknown";
     }
@@ -159,15 +245,53 @@ void printValue(const Value* value) {
         case VAL_NONE:
             printf("none");
             break;
+
         case VAL_BOOL:
             printf("%s", value->as.boolean ? "true" : "false");
             break;
+
         case VAL_NUMBER:
             printf("%g", value->as.number);
             break;
+
         case VAL_STRING:
             printf("%s", value->as.string ? value->as.string : "");
             break;
+
+        case VAL_NATIVE_FUNCTION:
+            if (value->as.nativeFunction != NULL && value->as.nativeFunction->name != NULL) {
+                printf("<native fn %s>", value->as.nativeFunction->name);
+            } else {
+                printf("<native fn>");
+            }
+            break;
+
+        case VAL_FUNCTION:
+            if (value->as.function != NULL && value->as.function->name != NULL) {
+                printf("<fn %s>", value->as.function->name);
+            } else {
+                printf("<fn>");
+            }
+            break;
+
+        case VAL_CLASS:
+            if (value->as.classObject != NULL && value->as.classObject->name != NULL) {
+                printf("<class %s>", value->as.classObject->name);
+            } else {
+                printf("<class>");
+            }
+            break;
+
+        case VAL_INSTANCE:
+            if (value->as.instance != NULL &&
+                value->as.instance->classObject != NULL &&
+                value->as.instance->classObject->name != NULL) {
+                printf("<%s instance>", value->as.instance->classObject->name);
+            } else {
+                printf("<instance>");
+            }
+            break;
+
         default:
             printf("<unknown>");
             break;
