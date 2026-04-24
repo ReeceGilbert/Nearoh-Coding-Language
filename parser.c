@@ -601,7 +601,8 @@ static AstNode* parseAssignment(ParseState* parser) {
         }
 
         if (left->type != AST_IDENTIFIER_EXPR &&
-            left->type != AST_MEMBER_EXPR) {
+            left->type != AST_MEMBER_EXPR &&
+            left->type != AST_INDEX_EXPR) {
             parserErrorAtToken(parser, &op, "Invalid assignment target.");
             return NULL;
         }
@@ -785,6 +786,26 @@ static AstNode* parseCall(ParseState* parser) {
             access = newAstNode(AST_MEMBER_EXPR, *member);
             access->as.memberExpr.object = expr;
             access->as.memberExpr.member = *member;
+            expr = access;
+            continue;
+        }
+
+        if (parserMatch(parser, TOKEN_LBRACKET)) {
+            Token open = *parserPrevious(parser);
+
+            AstNode* index = parseExpression(parser);
+            if (index == NULL) {
+                return NULL;
+            }
+
+            if (parserConsume(parser, TOKEN_RBRACKET, "Expected ']' after index.") == NULL) {
+                return NULL;
+            }
+
+            AstNode* access = newAstNode(AST_INDEX_EXPR, open);
+            access->as.indexExpr.object = expr;
+            access->as.indexExpr.index = index;
+
             expr = access;
             continue;
         }

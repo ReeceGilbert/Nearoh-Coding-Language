@@ -925,6 +925,53 @@ static Value evalBinary(Runtime* runtime, AstNode* node) {
     return result;
 }
 
+static Value evalIndex(Runtime* runtime, AstNode* node) {
+    Value objectValue;
+    Value indexValue;
+    int index;
+
+    objectValue = runtimeEvalExpression(runtime, node->as.indexExpr.object);
+    if (runtime->hadError) {
+        return makeNone();
+    }
+
+    indexValue = runtimeEvalExpression(runtime, node->as.indexExpr.index);
+    if (runtime->hadError) {
+        freeValue(&objectValue);
+        return makeNone();
+    }
+
+    if (objectValue.type != VAL_LIST) {
+        freeValue(&objectValue);
+        freeValue(&indexValue);
+        runtimeError(runtime, "Only lists support indexing right now.");
+        return makeNone();
+    }
+
+    if (indexValue.type != VAL_NUMBER) {
+        freeValue(&objectValue);
+        freeValue(&indexValue);
+        runtimeError(runtime, "List index must be a number.");
+        return makeNone();
+    }
+
+    index = (int)indexValue.as.number;
+
+    if (index < 0 || index >= objectValue.as.list->count) {
+        freeValue(&objectValue);
+        freeValue(&indexValue);
+        runtimeError(runtime, "List index out of bounds.");
+        return makeNone();
+    }
+
+    {
+        Value result = copyValue(&objectValue.as.list->items[index]);
+        freeValue(&objectValue);
+        freeValue(&indexValue);
+        return result;
+    }
+}
+
 static ExecResult executeAssign(Runtime* runtime, AstNode* node) {
     AstNode* target = node->as.assignStmt.target;
     Value rhs;
@@ -1002,8 +1049,74 @@ static ExecResult executeAssign(Runtime* runtime, AstNode* node) {
         return execNormal();
     }
 
+    if (target->type == AST_INDEX_EXPR) {
+        AstNode* objectNode = target->as.indexExpr.object;
+        Value* listRef;
+        Value indexValue;
+        int index;
+        char* name;
+
+        if (objectNode == NULL || objectNode->type != AST_IDENTIFIER_EXPR) {
+            freeValue(&rhs);
+            runtimeError(runtime, "Index assignment currently requires a named list.");
+            return execError();
+        }
+
+        name = copyTokenText(objectNode->as.identifierExpr.name);
+        if (name == NULL) {
+            freeValue(&rhs);
+            runtimeError(runtime, "Out of memory while assigning list index.");
+            return execError();
+        }
+
+        listRef = envGetRef(runtime->current, name);
+        free(name);
+
+        if (listRef == NULL) {
+            freeValue(&rhs);
+            runtimeError(runtime, "Undefined list variable.");
+            return execError();
+        }
+
+        indexValue = runtimeEvalExpression(runtime, target->as.indexExpr.index);
+        if (runtime->hadError) {
+            freeValue(&rhs);
+            return execError();
+        }
+
+        if (listRef->type != VAL_LIST) {
+            freeValue(&indexValue);
+            freeValue(&rhs);
+            runtimeError(runtime, "Only lists support index assignment right now.");
+            return execError();
+        }
+
+        if (indexValue.type != VAL_NUMBER) {
+            freeValue(&indexValue);
+            freeValue(&rhs);
+            runtimeError(runtime, "List index must be a number.");
+            return execError();
+        }
+
+        index = (int)indexValue.as.number;
+
+        if (index < 0 || index >= listRef->as.list->count) {
+            freeValue(&indexValue);
+            freeValue(&rhs);
+            runtimeError(runtime, "List assignment index out of bounds.");
+            return execError();
+        }
+
+        freeValue(&listRef->as.list->items[index]);
+        listRef->as.list->items[index] = copyValue(&rhs);
+
+        freeValue(&indexValue);
+        freeValue(&rhs);
+        return execNormal();
+    }
+
     freeValue(&rhs);
-    runtimeError(runtime, "Only identifier or member assignment is supported right now.");
+    runtimeError(runtime, "Only identifier, member, or index assignment is supported right now.");
     return execError();
 }
 
@@ -1136,6 +1249,9 @@ Value runtimeEvalExpression(Runtime* runtime, AstNode* node) {
             runtimeError(runtime, "Undefined member.");
             return makeNone();
         }
+
+        case AST_INDEX_EXPR:
+            return evalIndex(runtime, node);
 
         case AST_LIST_EXPR: {
             ListObject* list;

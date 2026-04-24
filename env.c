@@ -150,3 +150,23 @@ int envGet(const Environment* env, const char* name, Value* outValue) {
 
     return 0;
 }
+
+Value* envGetRef(Environment* env, const char* name) {
+    int i;
+
+    if (env == NULL || name == NULL) {
+        return NULL;
+    }
+
+    for (i = 0; i < env->count; i++) {
+        if (strcmp(env->bindings[i].name, name) == 0) {
+            return &env->bindings[i].value;
+        }
+    }
+
+    if (env->parent != NULL) {
+        return envGetRef(env->parent, name);
+    }
+
+    return NULL;
+}

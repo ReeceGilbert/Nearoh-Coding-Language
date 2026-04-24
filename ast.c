@@ -226,6 +226,12 @@ void printAst(const AstNode* node, int depth) {
     }
 
     switch (node->type) {
+        case AST_INDEX_EXPR:
+            printf("INDEX\n");
+            printAst(node->as.indexExpr.object, depth + 1);
+            printAst(node->as.indexExpr.index, depth + 1);
+            break;
+
         case AST_MODULE:
             printIndent(depth);
             printf("MODULE\n");
