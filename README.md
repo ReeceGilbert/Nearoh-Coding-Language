@@ -39,15 +39,19 @@ Nearoh now executes real multi-feature programs including:
 - Object member access
 - Methods with bound `self`
 - Lists
+- List indexing
+- List index assignment
 - `for ... in` iteration over lists
 - Variables / reassignment
 - Arithmetic
+- Strings
 - `if / else`
 - `while`
 - Functions
 - Return values
 - Scope environments
 - Builtin `print`
+- Builtin `len`
 
 ---
 
@@ -64,3 +68,10 @@ points = [Vector2(1, 2), Vector2(3, 4)]
 for p in points:
     print(p.x)
     print(p.y)
+
+items = [10, 20, 30]
+items[1] = 99
+
+print(items[1])
+print(len(items))
+print(len("Nearoh"))
