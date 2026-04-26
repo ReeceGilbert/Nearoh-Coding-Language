@@ -4,8 +4,7 @@ A Python-inspired programming language written in C with a focus on real usabili
 
 Nearoh is not a toy parser or syntax gimmick. It is being built as a practical language/runtime I would genuinely want to use in daily workflow—while keeping full control over internals, performance paths, and future low-level expansion.
 
-Website:
-[https://nearoh-coding-language.base44.app](https://nearoh-coding-language.base44.app)
+**Website:** [https://nearoh-coding-language.base44.app](https://nearoh-coding-language.base44.app)
 
 ---
 
@@ -35,7 +34,7 @@ Nearoh now executes real multi-feature programs including:
 
 * Classes
 * Automatic `__init__` constructors
-* Object field storage
+  n- Object field storage
 * Object member access
 * Methods with bound `self`
 * Lists
@@ -52,6 +51,7 @@ Nearoh now executes real multi-feature programs including:
 * Scope environments
 * Builtin `print`
 * Builtin `len`
+* CLI execution modes (`run`, `--tokens`, `--ast`, `--debug`)
 
 ---
 
@@ -93,7 +93,7 @@ Expected Output:
 
 # Why This Project Matters
 
-Most language projects stop at parsing.
+Most hobby language projects stop at parsing.
 
 Nearoh already includes:
 
