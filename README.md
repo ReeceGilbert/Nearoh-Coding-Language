@@ -4,6 +4,8 @@ A Python-inspired programming language written in C, focused on real usability, 
 
 Nearoh is not a toy parser or throwaway syntax project. It is being built as a practical language/runtime I would genuinely want to use—while maintaining full control over internals, performance paths, and future low-level expansion.
 
+## Links
+
 Website:
 https://nearoh-coding-language.base44.app
 
@@ -18,13 +20,13 @@ Nearoh aims to combine the productivity and readability of Python with the contr
 
 ## Core Goals
 
-- Familiar Python-style workflow
-- Clean readable syntax
-- Classes, objects, methods, and productivity-first scripting
-- Runtime written in C for control and performance
-- Expandable native bridge for machine-facing systems
-- Long-term editor / IDE environment built around the language
-- Strong architecture over rushed features
+* Familiar Python-style workflow
+* Clean readable syntax
+* Classes, objects, methods, and productivity-first scripting
+* Runtime written in C for control and performance
+* Expandable native bridge for machine-facing systems
+* Long-term editor / IDE environment built around the language
+* Strong architecture over rushed features
 
 This project is being built to become a serious personal-use language, not just a demo.
 
@@ -34,65 +36,76 @@ This project is being built to become a serious personal-use language, not just 
 
 ## Major Milestone Reached
 
-Nearoh now runs real multi-feature programs from the command line.
+Nearoh now runs real multi-feature programs from the command line with multiple developer modes and improved diagnostics.
 
 Implemented systems include:
 
-- Lexer
-- Parser
-- AST generation
-- Runtime evaluator
-- Scope / environment model
-- Variables and reassignment
-- Arithmetic
-- Strings
-- Numbers
-- Booleans
-- if / else
-- while loops
-- Functions
-- Return values
-- Classes
-- Automatic `__init__` constructors
-- Object fields
-- Member access
-- Bound `self` methods
-- Lists
-- List indexing
-- List index assignment
-- `for ... in` list iteration
-- Builtin `print()`
-- Builtin `len()`
+* Lexer
+* Parser
+* AST generation
+* Runtime evaluator
+* Scope / environment model
+* Variables and reassignment
+* Arithmetic
+* Strings
+* Numbers
+* Booleans
+* `if / else`
+* `while` loops
+* Functions
+* Return values
+* Classes
+* Automatic `__init__` constructors
+* Object fields
+* Member access
+* Bound `self` methods
+* Lists
+* List indexing
+* List index assignment
+* `for ... in` list iteration
+* Builtin `print()`
+* Builtin `len()`
+* Runtime line/column error reporting
+* Debug / token / AST CLI modes
 
-## CLI Modes
+---
 
-Nearoh now supports:
+# CLI Usage
 
 ```bash
 nearoh examples/hello.nr
 nearoh --tokens examples/hello.nr
 nearoh --ast examples/hello.nr
 nearoh --debug examples/hello.nr
+```
 
+## Modes
 
-⸻
+* **Run** → executes program normally
+* **--tokens** → prints lexer output
+* **--ast** → prints parsed AST
+* **--debug** → prints source, tokens, AST, diagnostics, then execution
 
-Example Programs
+---
+
+# Example Programs
 
 The repository includes runnable examples:
-	•	examples/hello.nr
-	•	examples/variables.nr
-	•	examples/functions.nr
-	•	examples/classes.nr
-	•	examples/lists.nr
-	•	examples/loops.nr
-	•	examples/objects_and_lists.nr
-	•	examples/arena_showcase.nr
 
-⸻
+* `examples/hello.nr`
+* `examples/variables.nr`
+* `examples/functions.nr`
+* `examples/classes.nr`
+* `examples/lists.nr`
+* `examples/loops.nr`
+* `examples/objects_and_lists.nr`
+* `examples/arena_showcase.nr`
 
-Showcase Example
+---
 
+# Showcase Example
+
+```python
 class Vector2():
     def __init__(self, x, y):
         self.x = x
@@ -110,9 +123,11 @@ items[1] = 99
 print(items[1])
 print(len(items))
 print(len("Nearoh"))
+```
 
 Expected Output:
 
+```text
 1
 2
 3
@@ -122,70 +137,93 @@ Expected Output:
 6
 ```
 
-⸻
+---
 
 # Arena Showcase
 
-arena_showcase.nr is a larger demonstration program proving that Nearoh can coordinate multiple systems together.
+`arena_showcase.nr` is a larger demonstration proving Nearoh can coordinate multiple systems together.
 
 It uses:
-	•	Classes
-	•	Lists of objects
-	•	Constructors
-	•	Object state mutation
-	•	Functions
-	•	Conditional logic
-	•	While loops
-	•	For loops
-	•	Runtime score tracking
-	•	Multi-round battle simulation logic
+
+* Classes
+* Lists of objects
+* Constructors
+* Object state mutation
+* Functions
+* Conditional logic
+* While loops
+* For loops
+* Runtime score tracking
+* Multi-round battle simulation logic
 
 This moves Nearoh beyond syntax demos into real executable projects.
 
-⸻
+---
+
+# Recent Core Improvements
+
+Latest cleanup / stabilization pass included:
+
+* Cleaner `main.c` CLI architecture
+* Improved parser structure and error handling
+* AST cleanup and memory handling fixes
+* Value / list system cleanup
+* Environment system cleanup
+* Better runtime diagnostics with source locations
+* Safer project-wide organization
+
+Nearoh now has a much stronger foundation for future growth.
+
+---
 
 # Why This Project Matters
 
 Many hobby language projects stop at parsing expressions.
 
 Nearoh already includes real runtime behavior:
-	•	Executable programs
-	•	User-defined functions
-	•	Object-oriented systems
-	•	Dynamic lists
-	•	Scope handling
-	•	Builtins
-	•	Structured examples
-	•	Command-line tooling
+
+* Executable programs
+* User-defined functions
+* Object-oriented systems
+* Dynamic lists
+* Scope handling
+* Builtins
+* Structured examples
+* Command-line tooling
+* Debugging modes
+* Runtime diagnostics
 
 That means the project is moving into genuine language engineering territory.
 
-⸻
+---
 
 # Roadmap
 
 ## Near-Term
-	•	Dictionaries / maps
-	•	Better runtime error messages
-	•	Cleaner diagnostics with line numbers
-	•	Standard library utilities
-	•	File I/O
+
+* Dictionaries / maps
+* More runtime safety checks
+* Cleaner diagnostics and error UX
+* Standard library utilities
+* File I/O
 
 ## Mid-Term
-	•	Modules / imports
-	•	Expanded builtins
-	•	Better performance paths
-	•	Improved memory systems
-	•	Tooling improvements
+
+* Modules / imports
+* Expanded builtins
+* Better performance paths
+* Improved memory systems
+* Tooling improvements
 
 ## Long-Term
-	•	Native graphics / window bridge
-	•	Input / timing systems
-	•	Bytecode VM or compiled backend research
-	•	Dedicated Nearoh editor / IDE
-	•	Potential self-hosted growth path
 
-⸻
+* Native graphics / window bridge
+* Input / timing systems
+* Bytecode VM or compiled backend research
+* Dedicated Nearoh editor / IDE
+* Potential self-hosted growth path
+
+---
 
 # Philosophy
 
@@ -198,7 +236,7 @@ The goal is to preserve what makes Python productive while gaining deeper owners
 Readable high-level development on top.
 Low-level power underneath.
 
-⸻
+---
 
 # Author
 
@@ -206,7 +244,7 @@ Built by Reece Gilbert.
 
 This project reflects years of programming curiosity, systems experimentation, graphics work, simulation building, and the drive to create something real from scratch.
 
-⸻
+---
 
 # Current Stage
 
