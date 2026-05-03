@@ -19,6 +19,8 @@ typedef struct InstanceObject InstanceObject;
 typedef struct BoundMethodObject BoundMethodObject;
 
 typedef struct ListObject ListObject;
+typedef struct DictEntry DictEntry;
+typedef struct DictObject DictObject;
 
 typedef enum {
     VAL_NONE,
@@ -30,7 +32,8 @@ typedef enum {
     VAL_CLASS,
     VAL_INSTANCE,
     VAL_BOUND_METHOD,
-    VAL_LIST
+    VAL_LIST,
+    VAL_DICT
 } ValueType;
 
 struct FunctionObject {
@@ -79,7 +82,19 @@ struct Value {
         InstanceObject* instance;
         BoundMethodObject* boundMethod;
         ListObject* list;
+        DictObject* dict;
     } as;
+};
+
+struct DictEntry {
+    Value key;
+    Value value;
+};
+
+struct DictObject {
+    DictEntry* entries;
+    int count;
+    int capacity;
 };
 
 struct NativeFunction {
@@ -116,6 +131,11 @@ Value makeBoundMethod(BoundMethodObject* boundMethod);
 Value makeList(ListObject* list);
 ListObject* createListObject(void);
 int listAppend(ListObject* list, Value value);
+
+Value makeDict(DictObject* dict);
+DictObject* createDictObject(void);
+int dictSet(DictObject* dict, Value key, Value value);
+int dictGet(DictObject* dict, const Value* key, Value* outValue);
 
 void freeValue(Value* value);
 Value copyValue(const Value* value);

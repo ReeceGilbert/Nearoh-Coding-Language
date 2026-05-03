@@ -61,6 +61,7 @@ static AstNode* parseFactor(ParseState* parser);
 static AstNode* parseUnary(ParseState* parser);
 static AstNode* parseCall(ParseState* parser);
 static AstNode* parseListLiteral(ParseState* parser);
+static AstNode* parseDictLiteral(ParseState* parser);
 static AstNode* parsePrimary(ParseState* parser);
 
 // ------------------------------------------------------------
@@ -948,6 +949,57 @@ static AstNode* parseListLiteral(ParseState* parser) {
     return list;
 }
 
+static AstNode* parseDictLiteral(ParseState* parser) {
+    Token openToken;
+    AstNode* dict;
+
+    if (!parserMatch(parser, TOKEN_LBRACE)) {
+        parserErrorAtToken(parser, parserPeek(parser), "Expected '{'.");
+        return NULL;
+    }
+
+    openToken = *parserPrevious(parser);
+    dict = newAstNode(AST_DICT_EXPR, openToken);
+    initAstNodeArray(&dict->as.dictExpr.keys);
+    initAstNodeArray(&dict->as.dictExpr.values);
+
+    if (!parserCheck(parser, TOKEN_RBRACE)) {
+        do {
+            AstNode* key = parseExpression(parser);
+            AstNode* value;
+
+            if (key == NULL) {
+                freeAst(dict);
+                return NULL;
+            }
+
+            if (parserConsume(parser, TOKEN_COLON, "Expected ':' after dictionary key.") == NULL) {
+                freeAst(key);
+                freeAst(dict);
+                return NULL;
+            }
+
+            value = parseExpression(parser);
+
+            if (value == NULL) {
+                freeAst(key);
+                freeAst(dict);
+                return NULL;
+            }
+
+            pushAstNode(&dict->as.dictExpr.keys, key);
+            pushAstNode(&dict->as.dictExpr.values, value);
+        } while (parserMatch(parser, TOKEN_COMMA));
+    }
+
+    if (parserConsume(parser, TOKEN_RBRACE, "Expected '}' after dictionary literal.") == NULL) {
+        freeAst(dict);
+        return NULL;
+    }
+
+    return dict;
+}
+
 static AstNode* parsePrimary(ParseState* parser) {
     if (parserMatch(parser, TOKEN_NUMBER) ||
         parserMatch(parser, TOKEN_STRING) ||
@@ -959,6 +1011,10 @@ static AstNode* parsePrimary(ParseState* parser) {
 
     if (parserCheck(parser, TOKEN_LBRACKET)) {
         return parseListLiteral(parser);
+    }
+
+    if (parserCheck(parser, TOKEN_LBRACE)) {
+        return parseDictLiteral(parser);
     }
 
     if (parserMatch(parser, TOKEN_IDENTIFIER)) {

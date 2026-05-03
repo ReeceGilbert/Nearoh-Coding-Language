@@ -941,10 +941,25 @@ static Value evalIndex(Runtime* runtime, AstNode* node) {
         return makeNone();
     }
 
+    if (objectValue.type == VAL_DICT) {
+        Value result;
+
+        if (dictGet(objectValue.as.dict, &indexValue, &result)) {
+            freeValue(&objectValue);
+            freeValue(&indexValue);
+            return result;
+        }
+
+        freeValue(&objectValue);
+        freeValue(&indexValue);
+        runtimeError(runtime, "Dictionary key not found.");
+        return makeNone();
+    }
+
     if (objectValue.type != VAL_LIST) {
         freeValue(&objectValue);
         freeValue(&indexValue);
-        runtimeError(runtime, "Only lists support indexing right now.");
+        runtimeError(runtime, "Only lists and dictionaries support indexing right now.");
         return makeNone();
     }
 
@@ -1044,7 +1059,7 @@ static ExecResult executeAssign(Runtime* runtime, AstNode* node) {
 
     if (target->type == AST_INDEX_EXPR) {
         AstNode* objectNode = target->as.indexExpr.object;
-        Value* listRef;
+        Value* objectRef;
         Value indexValue;
         int index;
         char* name;
@@ -1062,10 +1077,10 @@ static ExecResult executeAssign(Runtime* runtime, AstNode* node) {
             return execError();
         }
 
-        listRef = envGetRef(runtime->current, name);
+        objectRef = envGetRef(runtime->current, name);
         free(name);
 
-        if (listRef == NULL) {
+        if (objectRef == NULL) {
             freeValue(&rhs);
             runtimeError(runtime, "Undefined list variable.");
             return execError();
@@ -1077,7 +1092,20 @@ static ExecResult executeAssign(Runtime* runtime, AstNode* node) {
             return execError();
         }
 
-        if (listRef->type != VAL_LIST) {
+        if (objectRef->type == VAL_DICT) {
+            if (!dictSet(objectRef->as.dict, indexValue, rhs)) {
+                freeValue(&indexValue);
+                freeValue(&rhs);
+                runtimeError(runtime, "Failed to assign dictionary key.");
+                return execError();
+            }
+
+            freeValue(&indexValue);
+            freeValue(&rhs);
+            return execNormal();
+        }
+
+        if (objectRef->type != VAL_LIST) {
             freeValue(&indexValue);
             freeValue(&rhs);
             runtimeError(runtime, "Only lists support index assignment right now.");
@@ -1093,15 +1121,15 @@ static ExecResult executeAssign(Runtime* runtime, AstNode* node) {
 
         index = (int)indexValue.as.number;
 
-        if (index < 0 || index >= listRef->as.list->count) {
+        if (index < 0 || index >= objectRef->as.list->count) {
             freeValue(&indexValue);
             freeValue(&rhs);
             runtimeError(runtime, "List assignment index out of bounds.");
             return execError();
         }
 
-        freeValue(&listRef->as.list->items[index]);
-        listRef->as.list->items[index] = copyValue(&rhs);
+        freeValue(&objectRef->as.list->items[index]);
+        objectRef->as.list->items[index] = copyValue(&rhs);
 
         freeValue(&indexValue);
         freeValue(&rhs);
@@ -1313,6 +1341,50 @@ Value runtimeEvalExpression(Runtime* runtime, AstNode* node) {
             }
 
             return makeList(list);
+        }
+
+        case AST_DICT_EXPR: {
+            DictObject* dict;
+            int i;
+
+            dict = createDictObject();
+            if (dict == NULL) {
+                runtimeError(runtime, "Out of memory while creating dictionary.");
+                return makeNone();
+            }
+
+            for (i = 0; i < node->as.dictExpr.keys.count; i++) {
+                Value key = runtimeEvalExpression(runtime, node->as.dictExpr.keys.items[i]);
+                Value value;
+
+                if (runtime->hadError) {
+                    freeValue(&key);
+                    freeValue(&(Value){ .type = VAL_DICT, .as.dict = dict });
+                    return makeNone();
+                }
+
+                value = runtimeEvalExpression(runtime, node->as.dictExpr.values.items[i]);
+
+                if (runtime->hadError) {
+                    freeValue(&key);
+                    freeValue(&value);
+                    freeValue(&(Value){ .type = VAL_DICT, .as.dict = dict });
+                    return makeNone();
+                }
+
+                if (!dictSet(dict, key, value)) {
+                    freeValue(&key);
+                    freeValue(&value);
+                    freeValue(&(Value){ .type = VAL_DICT, .as.dict = dict });
+                    runtimeError(runtime, "Out of memory while adding dictionary entry.");
+                    return makeNone();
+                }
+
+                freeValue(&key);
+                freeValue(&value);
+            }
+
+            return makeDict(dict);
         }
 
         default:

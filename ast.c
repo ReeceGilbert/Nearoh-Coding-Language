@@ -247,6 +247,11 @@ void freeAst(AstNode* node) {
             freeAstNodeArray(&node->as.listExpr.elements);
             break;
 
+        case AST_DICT_EXPR:
+            freeAstNodeArray(&node->as.dictExpr.keys);
+            freeAstNodeArray(&node->as.dictExpr.values);
+            break;
+
         case AST_INDEX_EXPR:
             freeAst(node->as.indexExpr.object);
             freeAst(node->as.indexExpr.index);
@@ -463,6 +468,21 @@ void printAst(const AstNode* node, int depth) {
 
             for (i = 0; i < node->as.listExpr.elements.count; i++) {
                 printAst(node->as.listExpr.elements.items[i], depth + 1);
+            }
+            break;
+
+        case AST_DICT_EXPR:
+            printIndent(depth);
+            printf("DICT\n");
+
+            for (i = 0; i < node->as.dictExpr.keys.count; i++) {
+                printIndent(depth + 1);
+                printf("KEY\n");
+                printAst(node->as.dictExpr.keys.items[i], depth + 2);
+
+                printIndent(depth + 1);
+                printf("VALUE\n");
+                printAst(node->as.dictExpr.values.items[i], depth + 2);
             }
             break;
 

@@ -446,6 +446,14 @@ static Token scanOperatorOrPunctuation(Scanner* scanner, char c) {
             if (scanner->groupDepth > 0) scanner->groupDepth--;
             return makeToken(scanner, TOKEN_RBRACKET);
 
+        case '{':
+            scanner->groupDepth++;
+            return makeToken(scanner, TOKEN_LBRACE);
+
+        case '}':
+            if (scanner->groupDepth > 0) scanner->groupDepth--;
+            return makeToken(scanner, TOKEN_RBRACE);
+
         case ',':
             return makeToken(scanner, TOKEN_COMMA);
 
@@ -651,6 +659,8 @@ const char* tokenTypeToString(TokenType type) {
         case TOKEN_RPAREN:        return "RPAREN";
         case TOKEN_LBRACKET:      return "LBRACKET";
         case TOKEN_RBRACKET:      return "RBRACKET";
+        case TOKEN_LBRACE:        return "LBRACE";
+        case TOKEN_RBRACE:        return "RBRACE";
         case TOKEN_COMMA:         return "COMMA";
         case TOKEN_DOT:           return "DOT";
         case TOKEN_COLON:         return "COLON";

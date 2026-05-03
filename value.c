@@ -5,10 +5,13 @@
 #include <string.h>
 
 #define LIST_INITIAL_CAPACITY 8
+#define DICT_INITIAL_CAPACITY 8
 
 static char* duplicateString(const char* text);
 static int ensureListCapacity(ListObject* list);
 static void freeListObject(ListObject* list);
+static int ensureDictCapacity(DictObject* dict);
+static void freeDictObject(DictObject* dict);
 
 // ------------------------------------------------------------
 // INTERNAL HELPERS
@@ -75,6 +78,49 @@ static void freeListObject(ListObject* list) {
     free(list);
 }
 
+static int ensureDictCapacity(DictObject* dict) {
+    DictEntry* newEntries;
+    int newCapacity;
+
+    if (dict == NULL) {
+        return 0;
+    }
+
+    if (dict->count < dict->capacity) {
+        return 1;
+    }
+
+    newCapacity = (dict->capacity < DICT_INITIAL_CAPACITY)
+        ? DICT_INITIAL_CAPACITY
+        : dict->capacity * 2;
+
+    newEntries = (DictEntry*)realloc(dict->entries, sizeof(DictEntry) * (size_t)newCapacity);
+
+    if (newEntries == NULL) {
+        return 0;
+    }
+
+    dict->entries = newEntries;
+    dict->capacity = newCapacity;
+    return 1;
+}
+
+static void freeDictObject(DictObject* dict) {
+    int i;
+
+    if (dict == NULL) {
+        return;
+    }
+
+    for (i = 0; i < dict->count; i++) {
+        freeValue(&dict->entries[i].key);
+        freeValue(&dict->entries[i].value);
+    }
+
+    free(dict->entries);
+    free(dict);
+}
+
 // ------------------------------------------------------------
 // LISTS
 // ------------------------------------------------------------
@@ -106,6 +152,67 @@ int listAppend(ListObject* list, Value value) {
     list->count++;
 
     return 1;
+}
+
+// ------------------------------------------------------------
+// DICTIONARIES
+// ------------------------------------------------------------
+
+DictObject* createDictObject(void) {
+    DictObject* dict = (DictObject*)malloc(sizeof(DictObject));
+
+    if (dict == NULL) {
+        return NULL;
+    }
+
+    dict->entries = NULL;
+    dict->count = 0;
+    dict->capacity = 0;
+
+    return dict;
+}
+
+int dictSet(DictObject* dict, Value key, Value value) {
+    int i;
+
+    if (dict == NULL) {
+        return 0;
+    }
+
+    for (i = 0; i < dict->count; i++) {
+        if (valueEquals(&dict->entries[i].key, &key)) {
+            freeValue(&dict->entries[i].value);
+            dict->entries[i].value = copyValue(&value);
+            return 1;
+        }
+    }
+
+    if (!ensureDictCapacity(dict)) {
+        return 0;
+    }
+
+    dict->entries[dict->count].key = copyValue(&key);
+    dict->entries[dict->count].value = copyValue(&value);
+    dict->count++;
+
+    return 1;
+}
+
+int dictGet(DictObject* dict, const Value* key, Value* outValue) {
+    int i;
+
+    if (dict == NULL || key == NULL || outValue == NULL) {
+        return 0;
+    }
+
+    for (i = 0; i < dict->count; i++) {
+        if (valueEquals(&dict->entries[i].key, key)) {
+            *outValue = copyValue(&dict->entries[i].value);
+            return 1;
+        }
+    }
+
+    return 0;
 }
 
 // ------------------------------------------------------------
@@ -205,6 +312,15 @@ Value makeList(ListObject* list) {
     return value;
 }
 
+Value makeDict(DictObject* dict) {
+    Value value;
+
+    value.type = VAL_DICT;
+    value.as.dict = dict;
+
+    return value;
+}
+
 // ------------------------------------------------------------
 // VALUE LIFETIME
 // ------------------------------------------------------------
@@ -223,6 +339,11 @@ void freeValue(Value* value) {
         case VAL_LIST:
             freeListObject(value->as.list);
             value->as.list = NULL;
+            break;
+
+        case VAL_DICT:
+            freeDictObject(value->as.dict);
+            value->as.dict = NULL;
             break;
 
         default:
@@ -290,6 +411,31 @@ Value copyValue(const Value* value) {
             return makeList(copy);
         }
 
+        case VAL_DICT: {
+            DictObject* source = value->as.dict;
+            DictObject* copy;
+            int i;
+
+            if (source == NULL) {
+                return makeDict(NULL);
+            }
+
+            copy = createDictObject();
+
+            if (copy == NULL) {
+                return makeNone();
+            }
+
+            for (i = 0; i < source->count; i++) {
+                if (!dictSet(copy, source->entries[i].key, source->entries[i].value)) {
+                    freeDictObject(copy);
+                    return makeNone();
+                }
+            }
+
+            return makeDict(copy);
+        }
+
         default:
             return makeNone();
     }
@@ -319,6 +465,9 @@ int valueIsTruthy(const Value* value) {
 
         case VAL_LIST:
             return value->as.list != NULL && value->as.list->count > 0;
+
+        case VAL_DICT:
+            return value->as.dict != NULL && value->as.dict->count > 0;
 
         case VAL_NATIVE_FUNCTION:
         case VAL_FUNCTION:
@@ -376,6 +525,9 @@ int valueEquals(const Value* a, const Value* b) {
         case VAL_LIST:
             return a->as.list == b->as.list;
 
+        case VAL_DICT:
+            return a->as.dict == b->as.dict;
+
         default:
             return 0;
     }
@@ -416,6 +568,9 @@ const char* valueTypeName(const Value* value) {
 
         case VAL_LIST:
             return "list";
+
+        case VAL_DICT:
+            return "dict";
 
         default:
             return "unknown";
@@ -511,6 +666,27 @@ void printValue(const Value* value) {
             }
 
             printf("]");
+            break;
+
+        case VAL_DICT:
+            if (value->as.dict == NULL) {
+                printf("{}");
+                break;
+            }
+
+            printf("{");
+
+            for (i = 0; i < value->as.dict->count; i++) {
+                if (i > 0) {
+                    printf(", ");
+                }
+
+                printValue(&value->as.dict->entries[i].key);
+                printf(": ");
+                printValue(&value->as.dict->entries[i].value);
+            }
+
+            printf("}");
             break;
 
         default:
