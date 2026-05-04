@@ -67,6 +67,10 @@ Implemented systems include:
 * Builtin `len()`
 * Runtime line/column error reporting
 * Debug / token / AST CLI modes
+* Dictionary iteration
+* More runtime safety checks
+* Dictionary indexing
+* Dictionary index assignment
 
 ---
 
