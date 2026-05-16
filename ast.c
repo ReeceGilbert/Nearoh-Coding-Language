@@ -215,6 +215,7 @@ void freeAst(AstNode* node) {
         case AST_PASS_STMT:
         case AST_BREAK_STMT:
         case AST_CONTINUE_STMT:
+        case AST_IMPORT_STMT:
             break;
 
         case AST_BINARY_EXPR:
@@ -396,6 +397,13 @@ void printAst(const AstNode* node, int depth) {
         case AST_CONTINUE_STMT:
             printIndent(depth);
             printf("CONTINUE\n");
+            break;
+
+        case AST_IMPORT_STMT:
+            printIndent(depth);
+            printf("IMPORT ");
+            printTokenLexeme(node->as.importStmt.path);
+            printf("\n");
             break;
 
         case AST_BINARY_EXPR:

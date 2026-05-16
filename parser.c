@@ -44,6 +44,7 @@ static AstNode* parseReturnStatement(ParseState* parser);
 static AstNode* parsePassStatement(ParseState* parser);
 static AstNode* parseBreakStatement(ParseState* parser);
 static AstNode* parseContinueStatement(ParseState* parser);
+static AstNode* parseImportStatement(ParseState* parser);
 static AstNode* parseIfStatement(ParseState* parser);
 static AstNode* parseIfLikeStatement(ParseState* parser, int startedWithElif);
 static AstNode* parseWhileStatement(ParseState* parser);
@@ -167,6 +168,7 @@ static void parserSynchronize(ParseState* parser) {
             case TOKEN_PASS:
             case TOKEN_BREAK:
             case TOKEN_CONTINUE:
+            case TOKEN_IMPORT:
                 return;
 
             default:
@@ -399,6 +401,10 @@ static AstNode* parseStatement(ParseState* parser) {
         return parseContinueStatement(parser);
     }
 
+    if (parserCheck(parser, TOKEN_IMPORT)) {
+        return parseImportStatement(parser);
+    }
+
     return parseExpressionStatement(parser);
 }
 
@@ -480,6 +486,32 @@ static AstNode* parseContinueStatement(ParseState* parser) {
     node = newAstNode(AST_CONTINUE_STMT, *token);
 
     if (!consumeStatementTerminator(parser, "Expected newline after continue.")) {
+        freeAst(node);
+        return NULL;
+    }
+
+    return node;
+}
+
+static AstNode* parseImportStatement(ParseState* parser) {
+    Token* importToken = parserConsume(parser, TOKEN_IMPORT, "Expected 'import'.");
+    Token* pathToken;
+    AstNode* node;
+
+    if (importToken == NULL) {
+        return NULL;
+    }
+
+    pathToken = parserConsume(parser, TOKEN_STRING, "Expected string path after import.");
+
+    if (pathToken == NULL) {
+        return NULL;
+    }
+
+    node = newAstNode(AST_IMPORT_STMT, *importToken);
+    node->as.importStmt.path = *pathToken;
+
+    if (!consumeStatementTerminator(parser, "Expected newline after import statement.")) {
         freeAst(node);
         return NULL;
     }

@@ -1,6 +1,8 @@
 #include "runtime.h"
 #include "builtins.h"
 #include "env.h"
+#include "lexer.h"
+#include "parser.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,6 +30,72 @@ static Token makeSyntheticIdentifierToken(const char* text) {
     token.offset = 0;
 
     return token;
+}
+
+static char* copyImportPath(Token token) {
+    char* text;
+    int length;
+
+    if (token.type != TOKEN_STRING || token.length < 2) {
+        return NULL;
+    }
+
+    length = token.length - 2;
+
+    text = (char*)malloc((size_t)length + 1);
+    if (text == NULL) {
+        return NULL;
+    }
+
+    memcpy(text, token.start + 1, (size_t)length);
+    text[length] = '\0';
+
+    return text;
+}
+
+static char* readSourceFile(const char* path) {
+    FILE* file;
+    long size;
+    char* buffer;
+    size_t readCount;
+
+    file = fopen(path, "rb");
+    if (file == NULL) {
+        return NULL;
+    }
+
+    if (fseek(file, 0, SEEK_END) != 0) {
+        fclose(file);
+        return NULL;
+    }
+
+    size = ftell(file);
+    if (size < 0) {
+        fclose(file);
+        return NULL;
+    }
+
+    if (fseek(file, 0, SEEK_SET) != 0) {
+        fclose(file);
+        return NULL;
+    }
+
+    buffer = (char*)malloc((size_t)size + 1);
+    if (buffer == NULL) {
+        fclose(file);
+        return NULL;
+    }
+
+    readCount = fread(buffer, 1, (size_t)size, file);
+    fclose(file);
+
+    if (readCount != (size_t)size) {
+        free(buffer);
+        return NULL;
+    }
+
+    buffer[size] = '\0';
+    return buffer;
 }
 
 static int assignLoopVariable(Runtime* runtime, Token nameToken, Value value) {
@@ -1260,6 +1328,87 @@ static ExecResult executeAssign(Runtime* runtime, AstNode* node) {
     return execError();
 }
 
+static ExecResult executeImportStatement(Runtime* runtime, AstNode* node) {
+    char* path;
+    char* source;
+    TokenArray* tokens;
+    Diagnostics* diagnostics;
+    AstNode* importedAst;
+    ExecResult result;
+
+    if (node == NULL || node->type != AST_IMPORT_STMT) {
+        runtimeError(runtime, "Invalid import statement.");
+        return execError();
+    }
+
+    path = copyImportPath(node->as.importStmt.path);
+    if (path == NULL) {
+        runtimeErrorAt(runtime, node, "Import path must be a string.");
+        return execError();
+    }
+
+    source = readSourceFile(path);
+    if (source == NULL) {
+        free(path);
+        runtimeErrorAt(runtime, node, "Could not read imported file.");
+        return execError();
+    }
+
+    tokens = (TokenArray*)malloc(sizeof(TokenArray));
+    diagnostics = (Diagnostics*)malloc(sizeof(Diagnostics));
+
+    if (tokens == NULL || diagnostics == NULL) {
+        free(path);
+        free(source);
+        free(tokens);
+        free(diagnostics);
+        runtimeError(runtime, "Out of memory while importing file.");
+        return execError();
+    }
+
+    initDiagnostics(diagnostics);
+
+    if (!lexSource(source, tokens, diagnostics)) {
+        free(path);
+        free(source);
+        freeTokenArray(tokens);
+        free(tokens);
+        free(diagnostics);
+        runtimeErrorAt(runtime, node, "Failed to lex imported file.");
+        return execError();
+    }
+
+    importedAst = parseTokens(tokens);
+    if (importedAst == NULL) {
+        free(path);
+        free(source);
+        freeTokenArray(tokens);
+        free(tokens);
+        free(diagnostics);
+        runtimeErrorAt(runtime, node, "Failed to parse imported file.");
+        return execError();
+    }
+
+    result = runtimeExecuteNode(runtime, importedAst);
+
+    /*
+        IMPORTANT:
+        Do not free source/tokens/importedAst yet.
+
+        Current FunctionObject stores pointers into AST bodies and tokens.
+        If an imported file defines a function/class and we free its AST/source,
+        later calls can point at freed memory.
+
+        This is a temporary safe leak for v0 import support.
+        Later, Runtime should own imported modules and free them in runtimeFree().
+    */
+
+    free(path);
+    free(diagnostics);
+
+    return result;
+}
+
 void runtimeInit(Runtime* runtime) {
     envInit(&runtime->globals, NULL);
     runtime->current = &runtime->globals;
@@ -1613,6 +1762,9 @@ ExecResult runtimeExecuteNode(Runtime* runtime, AstNode* node) {
             result.type = FLOW_CONTINUE;
             result.value = makeNone();
             return result;
+
+        case AST_IMPORT_STMT:
+            return executeImportStatement(runtime, node);
 
         case AST_FUNCTION_DEF: {
             FunctionObject* function;

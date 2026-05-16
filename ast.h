@@ -18,6 +18,7 @@ typedef enum {
     AST_PASS_STMT,
     AST_BREAK_STMT,
     AST_CONTINUE_STMT,
+    AST_IMPORT_STMT,
 
     AST_BINARY_EXPR,
     AST_UNARY_EXPR,
@@ -98,6 +99,10 @@ struct AstNode {
             Token name;
             AstNode* body;
         } classDef;
+
+        struct {
+            Token path;
+        } importStmt;
 
         struct {
             Token op;
