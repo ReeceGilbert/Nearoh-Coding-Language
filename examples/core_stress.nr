@@ -13,7 +13,7 @@ class Player():
         self.hp = self.hp + amount
 
     def add_item(self, item):
-        self.inventory[len(self.inventory)] = item
+        self.inventory = append(self.inventory, item)
 
     def status(self):
         print(self.name, "HP:", self.hp, "Items:", len(self.inventory))
