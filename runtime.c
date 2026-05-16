@@ -422,6 +422,33 @@ static int instanceGetField(Runtime* runtime, InstanceObject* instance, Token me
     return 0;
 }
 
+static Value* instanceGetFieldRef(Runtime* runtime, InstanceObject* instance, Token member) {
+    char* memberName;
+    int i;
+
+    if (instance == NULL) {
+        runtimeError(runtime, "Cannot get field reference from null instance.");
+        return NULL;
+    }
+
+    memberName = copyTokenText(member);
+    if (memberName == NULL) {
+        runtimeError(runtime, "Out of memory while getting member reference.");
+        return NULL;
+    }
+
+    for (i = 0; i < instance->fieldCount; i++) {
+        if (strcmp(instance->fields[i].name, memberName) == 0) {
+            free(memberName);
+            return &instance->fields[i].value;
+        }
+    }
+
+    free(memberName);
+    runtimeError(runtime, "Undefined member.");
+    return NULL;
+}
+
 static Value* evaluateArguments(Runtime* runtime, AstNodeArray* arguments, int* outCount) {
     Value* values;
     int i;
@@ -1058,22 +1085,25 @@ static ExecResult executeAssign(Runtime* runtime, AstNode* node) {
     }
 
     if (target->type == AST_INDEX_EXPR) {
-        AstNode* objectNode = target->as.indexExpr.object;
-        Value* objectRef;
-        Value indexValue;
-        int index;
-        char* name;
+    AstNode* objectNode = target->as.indexExpr.object;
+    Value* objectRef = NULL;
+    Value ownerValue;
+    Value indexValue;
+    int hasOwnerValue = 0;
+    int index;
 
-        if (objectNode == NULL || objectNode->type != AST_IDENTIFIER_EXPR) {
-            freeValue(&rhs);
-            runtimeError(runtime, "Index assignment currently requires a named list.");
-            return execError();
-        }
+    if (objectNode == NULL) {
+        freeValue(&rhs);
+        runtimeError(runtime, "Index assignment target is null.");
+        return execError();
+    }
 
-        name = copyTokenText(objectNode->as.identifierExpr.name);
+    if (objectNode->type == AST_IDENTIFIER_EXPR) {
+        char* name = copyTokenText(objectNode->as.identifierExpr.name);
+
         if (name == NULL) {
             freeValue(&rhs);
-            runtimeError(runtime, "Out of memory while assigning list index.");
+            runtimeError(runtime, "Out of memory while assigning index.");
             return execError();
         }
 
@@ -1082,59 +1112,148 @@ static ExecResult executeAssign(Runtime* runtime, AstNode* node) {
 
         if (objectRef == NULL) {
             freeValue(&rhs);
-            runtimeError(runtime, "Undefined list variable.");
+            runtimeError(runtime, "Undefined indexed variable.");
             return execError();
         }
+    } else if (objectNode->type == AST_MEMBER_EXPR) {
+        ownerValue = runtimeEvalExpression(runtime, objectNode->as.memberExpr.object);
+        hasOwnerValue = 1;
 
-        indexValue = runtimeEvalExpression(runtime, target->as.indexExpr.index);
         if (runtime->hadError) {
             freeValue(&rhs);
             return execError();
         }
 
-        if (objectRef->type == VAL_DICT) {
-            if (!dictSet(objectRef->as.dict, indexValue, rhs)) {
-                freeValue(&indexValue);
-                freeValue(&rhs);
-                runtimeError(runtime, "Failed to assign dictionary key.");
-                return execError();
+        if (ownerValue.type != VAL_INSTANCE) {
+            freeValue(&ownerValue);
+            freeValue(&rhs);
+            runtimeError(runtime, "Only instance members support member index assignment right now.");
+            return execError();
+        }
+
+        objectRef = instanceGetFieldRef(
+            runtime,
+            ownerValue.as.instance,
+            objectNode->as.memberExpr.member
+        );
+
+        if (runtime->hadError || objectRef == NULL) {
+            freeValue(&ownerValue);
+            freeValue(&rhs);
+            return execError();
+        }
+    } else {
+        freeValue(&rhs);
+        runtimeError(runtime, "Index assignment currently requires a variable or instance member.");
+        return execError();
+    }
+
+    indexValue = runtimeEvalExpression(runtime, target->as.indexExpr.index);
+    if (runtime->hadError) {
+        if (hasOwnerValue) {
+            freeValue(&ownerValue);
+        }
+
+        freeValue(&rhs);
+        return execError();
+    }
+
+    if (objectRef->type == VAL_DICT) {
+        if (!dictSet(objectRef->as.dict, indexValue, rhs)) {
+            freeValue(&indexValue);
+
+            if (hasOwnerValue) {
+                freeValue(&ownerValue);
             }
 
-            freeValue(&indexValue);
             freeValue(&rhs);
-            return execNormal();
-        }
-
-        if (objectRef->type != VAL_LIST) {
-            freeValue(&indexValue);
-            freeValue(&rhs);
-            runtimeError(runtime, "Only lists support index assignment right now.");
+            runtimeError(runtime, "Failed to assign dictionary key.");
             return execError();
         }
-
-        if (indexValue.type != VAL_NUMBER) {
-            freeValue(&indexValue);
-            freeValue(&rhs);
-            runtimeError(runtime, "List index must be a number.");
-            return execError();
-        }
-
-        index = (int)indexValue.as.number;
-
-        if (index < 0 || index >= objectRef->as.list->count) {
-            freeValue(&indexValue);
-            freeValue(&rhs);
-            runtimeError(runtime, "List assignment index out of bounds.");
-            return execError();
-        }
-
-        freeValue(&objectRef->as.list->items[index]);
-        objectRef->as.list->items[index] = copyValue(&rhs);
 
         freeValue(&indexValue);
+
+        if (hasOwnerValue) {
+            freeValue(&ownerValue);
+        }
+
         freeValue(&rhs);
         return execNormal();
     }
+
+    if (objectRef->type != VAL_LIST) {
+        freeValue(&indexValue);
+
+        if (hasOwnerValue) {
+            freeValue(&ownerValue);
+        }
+
+        freeValue(&rhs);
+        runtimeError(runtime, "Only lists and dictionaries support index assignment right now.");
+        return execError();
+    }
+
+    if (indexValue.type != VAL_NUMBER) {
+        freeValue(&indexValue);
+
+        if (hasOwnerValue) {
+            freeValue(&ownerValue);
+        }
+
+        freeValue(&rhs);
+        runtimeError(runtime, "List index must be a number.");
+        return execError();
+    }
+
+    index = (int)indexValue.as.number;
+
+    if (index < 0 || index > objectRef->as.list->count) {
+        freeValue(&indexValue);
+
+        if (hasOwnerValue) {
+            freeValue(&ownerValue);
+        }
+
+        freeValue(&rhs);
+        runtimeError(runtime, "List assignment index out of bounds.");
+        return execError();
+    }
+
+    if (index == objectRef->as.list->count) {
+        if (!listAppend(objectRef->as.list, rhs)) {
+            freeValue(&indexValue);
+
+            if (hasOwnerValue) {
+                freeValue(&ownerValue);
+            }
+
+            freeValue(&rhs);
+            runtimeError(runtime, "Out of memory while appending list item.");
+            return execError();
+        }
+
+        freeValue(&indexValue);
+
+        if (hasOwnerValue) {
+            freeValue(&ownerValue);
+        }
+
+        freeValue(&rhs);
+        return execNormal();
+    }
+
+    freeValue(&objectRef->as.list->items[index]);
+    objectRef->as.list->items[index] = copyValue(&rhs);
+
+    freeValue(&indexValue);
+
+    if (hasOwnerValue) {
+        freeValue(&ownerValue);
+    }
+
+    freeValue(&rhs);
+    return execNormal();
+}
 
     freeValue(&rhs);
     runtimeError(runtime, "Only identifier, member, or index assignment is supported right now.");
