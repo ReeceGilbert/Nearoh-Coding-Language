@@ -31,4 +31,15 @@ ks = keys(stats)
 for k in ks:
     print("key:", k)
 
+print(str(123))
+print(str(12.5))
+print(str(true))
+print(str(false))
+print(str(none))
+print(str("Nearoh"))
+
+print(num("123"))
+print(num("12.5"))
+print(num(99))
+
 print("=== Builtins Test Complete ===")

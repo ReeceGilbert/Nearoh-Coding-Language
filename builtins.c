@@ -1,6 +1,8 @@
 #include "builtins.h"
+#include "runtime.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static Value builtinPrint(Runtime* runtime, int argCount, Value* args) {
@@ -49,6 +51,96 @@ static Value builtinType(Runtime* runtime, int argCount, Value* args) {
     }
 
     return makeStringCopy(valueTypeName(&args[0]));
+}
+
+static Value builtinStr(Runtime* runtime, int argCount, Value* args) {
+    char buffer[128];
+
+    if (argCount != 1) {
+        runtimeError(runtime, "str() expects exactly 1 argument.");
+        return makeNone();
+    }
+
+    switch (args[0].type) {
+        case VAL_NONE:
+            return makeStringCopy("none");
+
+        case VAL_BOOL:
+            return makeStringCopy(args[0].as.boolean ? "true" : "false");
+
+        case VAL_NUMBER:
+            snprintf(buffer, sizeof(buffer), "%g", args[0].as.number);
+            return makeStringCopy(buffer);
+
+        case VAL_STRING:
+            return makeStringCopy(args[0].as.string == NULL ? "" : args[0].as.string);
+
+        case VAL_LIST:
+            return makeStringCopy("<list>");
+
+        case VAL_DICT:
+            return makeStringCopy("<dict>");
+
+        case VAL_FUNCTION:
+            return makeStringCopy("<function>");
+
+        case VAL_NATIVE_FUNCTION:
+            return makeStringCopy("<native_function>");
+
+        case VAL_CLASS:
+            return makeStringCopy("<class>");
+
+        case VAL_INSTANCE:
+            return makeStringCopy("<instance>");
+
+        case VAL_BOUND_METHOD:
+            return makeStringCopy("<bound_method>");
+
+        default:
+            return makeStringCopy("<unknown>");
+    }
+}
+
+static Value builtinNum(Runtime* runtime, int argCount, Value* args) {
+    char* endPtr;
+    double number;
+
+    if (argCount != 1) {
+        runtimeError(runtime, "num() expects exactly 1 argument.");
+        return makeNone();
+    }
+
+    if (args[0].type == VAL_NUMBER) {
+        return makeNumber(args[0].as.number);
+    }
+
+    if (args[0].type != VAL_STRING) {
+        runtimeError(runtime, "num() expects a string or number.");
+        return makeNone();
+    }
+
+    if (args[0].as.string == NULL) {
+        runtimeError(runtime, "num() cannot convert a null string.");
+        return makeNone();
+    }
+
+    number = strtod(args[0].as.string, &endPtr);
+
+    if (endPtr == args[0].as.string) {
+        runtimeError(runtime, "num() could not parse number.");
+        return makeNone();
+    }
+
+    while (*endPtr == ' ' || *endPtr == '\t' || *endPtr == '\r' || *endPtr == '\n') {
+        endPtr++;
+    }
+
+    if (*endPtr != '\0') {
+        runtimeError(runtime, "num() string contains non-number characters.");
+        return makeNone();
+    }
+
+    return makeNumber(number);
 }
 
 static Value builtinAppend(Runtime* runtime, int argCount, Value* args) {
@@ -214,6 +306,18 @@ void registerBuiltins(Environment* globals) {
         builtinType
     };
 
+    static NativeFunction strFunction = {
+        "str",
+        1,
+        builtinStr
+    };
+
+    static NativeFunction numFunction = {
+        "num",
+        1,
+        builtinNum
+    };
+
     static NativeFunction appendFunction = {
         "append",
         2,
@@ -245,6 +349,8 @@ void registerBuiltins(Environment* globals) {
     envDefine(globals, "print", makeNativeFunction(&printFunction));
     envDefine(globals, "len", makeNativeFunction(&lenFunction));
     envDefine(globals, "type", makeNativeFunction(&typeFunction));
+    envDefine(globals, "str", makeNativeFunction(&strFunction));
+    envDefine(globals, "num", makeNativeFunction(&numFunction));
     envDefine(globals, "append", makeNativeFunction(&appendFunction));
     envDefine(globals, "range", makeNativeFunction(&rangeFunction));
     envDefine(globals, "keys", makeNativeFunction(&keysFunction));
