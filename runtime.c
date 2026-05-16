@@ -747,6 +747,96 @@ static Value evalCall(Runtime* runtime, AstNode* node) {
     return result;
 }
 
+static char* cookStringLiteral(Runtime* runtime, Token literal) {
+    char quote;
+    const char* input;
+    int inputLength;
+    char* output;
+    int i;
+    int out;
+
+    if (literal.length < 2) {
+        runtimeError(runtime, "Invalid string literal.");
+        return NULL;
+    }
+
+    quote = literal.start[0];
+
+    if ((quote != '"' && quote != '\'') ||
+        literal.start[literal.length - 1] != quote) {
+        runtimeError(runtime, "Invalid string literal.");
+        return NULL;
+    }
+
+    input = literal.start + 1;
+    inputLength = literal.length - 2;
+
+    output = (char*)malloc((size_t)inputLength + 1);
+    if (output == NULL) {
+        runtimeError(runtime, "Out of memory while parsing string literal.");
+        return NULL;
+    }
+
+    i = 0;
+    out = 0;
+
+    while (i < inputLength) {
+        char c = input[i];
+
+        if (c == '\\') {
+            char next;
+
+            i++;
+
+            if (i >= inputLength) {
+                free(output);
+                runtimeError(runtime, "Unterminated escape sequence in string literal.");
+                return NULL;
+            }
+
+            next = input[i];
+
+            switch (next) {
+                case '\\':
+                    output[out++] = '\\';
+                    break;
+
+                case 'n':
+                    output[out++] = '\n';
+                    break;
+
+                case 't':
+                    output[out++] = '\t';
+                    break;
+
+                case 'r':
+                    output[out++] = '\r';
+                    break;
+
+                case '"':
+                    output[out++] = '"';
+                    break;
+
+                case '\'':
+                    output[out++] = '\'';
+                    break;
+
+                default:
+                    free(output);
+                    runtimeError(runtime, "Unknown escape sequence in string literal.");
+                    return NULL;
+            }
+        } else {
+            output[out++] = c;
+        }
+
+        i++;
+    }
+
+    output[out] = '\0';
+    return output;
+}
+
 static Value evalLiteral(Runtime* runtime, Token literal) {
     char* text;
     char* endPtr;
@@ -791,34 +881,13 @@ static Value evalLiteral(Runtime* runtime, Token literal) {
             return makeNone();
 
         case TOKEN_STRING: {
-            char* raw = copyTokenText(literal);
-            char* cooked;
-            int cookedLength;
+            char* cooked = cookStringLiteral(runtime, literal);
 
-            if (raw == NULL) {
-                runtimeError(runtime, "Out of memory while parsing string literal.");
+            if (cooked == NULL) {
                 return makeNone();
             }
 
-            if (literal.length >= 2 &&
-                ((raw[0] == '"' && raw[literal.length - 1] == '"') ||
-                 (raw[0] == '\'' && raw[literal.length - 1] == '\''))) {
-                raw[literal.length - 1] = '\0';
-                cooked = (char*)malloc((size_t)literal.length - 1);
-                if (cooked == NULL) {
-                    free(raw);
-                    runtimeError(runtime, "Out of memory while parsing string literal.");
-                    return makeNone();
-                }
-
-                memcpy(cooked, raw + 1, (size_t)literal.length - 2);
-                cookedLength = literal.length - 2;
-                cooked[cookedLength] = '\0';
-                free(raw);
-                return makeStringOwned(cooked);
-            }
-
-            return makeStringOwned(raw);
+            return makeStringOwned(cooked);
         }
 
         default:
