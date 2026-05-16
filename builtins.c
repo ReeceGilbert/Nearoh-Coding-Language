@@ -287,6 +287,153 @@ static Value builtinHas(Runtime* runtime, int argCount, Value* args) {
     return makeBool(0);
 }
 
+static Value builtinReadFile(Runtime* runtime, int argCount, Value* args) {
+    FILE* file;
+    long size;
+    char* buffer;
+    size_t readCount;
+
+    if (argCount != 1) {
+        runtimeError(runtime, "read_file() expects exactly 1 argument.");
+        return makeNone();
+    }
+
+    if (args[0].type != VAL_STRING || args[0].as.string == NULL) {
+        runtimeError(runtime, "read_file() expects a file path string.");
+        return makeNone();
+    }
+
+    file = fopen(args[0].as.string, "rb");
+    if (file == NULL) {
+        runtimeError(runtime, "read_file() could not open file.");
+        return makeNone();
+    }
+
+    if (fseek(file, 0, SEEK_END) != 0) {
+        fclose(file);
+        runtimeError(runtime, "read_file() failed to seek file.");
+        return makeNone();
+    }
+
+    size = ftell(file);
+    if (size < 0) {
+        fclose(file);
+        runtimeError(runtime, "read_file() failed to get file size.");
+        return makeNone();
+    }
+
+    if (fseek(file, 0, SEEK_SET) != 0) {
+        fclose(file);
+        runtimeError(runtime, "read_file() failed to rewind file.");
+        return makeNone();
+    }
+
+    buffer = (char*)malloc((size_t)size + 1);
+    if (buffer == NULL) {
+        fclose(file);
+        runtimeError(runtime, "Out of memory while reading file.");
+        return makeNone();
+    }
+
+    readCount = fread(buffer, 1, (size_t)size, file);
+    fclose(file);
+
+    if (readCount != (size_t)size) {
+        free(buffer);
+        runtimeError(runtime, "read_file() failed to read entire file.");
+        return makeNone();
+    }
+
+    buffer[size] = '\0';
+    return makeStringOwned(buffer);
+}
+
+static Value builtinWriteFile(Runtime* runtime, int argCount, Value* args) {
+    FILE* file;
+    const char* path;
+    const char* text;
+    size_t length;
+    size_t written;
+
+    if (argCount != 2) {
+        runtimeError(runtime, "write_file() expects exactly 2 arguments.");
+        return makeNone();
+    }
+
+    if (args[0].type != VAL_STRING || args[0].as.string == NULL) {
+        runtimeError(runtime, "write_file() expects the first argument to be a file path string.");
+        return makeNone();
+    }
+
+    if (args[1].type != VAL_STRING || args[1].as.string == NULL) {
+        runtimeError(runtime, "write_file() expects the second argument to be a string.");
+        return makeNone();
+    }
+
+    path = args[0].as.string;
+    text = args[1].as.string;
+
+    file = fopen(path, "wb");
+    if (file == NULL) {
+        runtimeError(runtime, "write_file() could not open file for writing.");
+        return makeNone();
+    }
+
+    length = strlen(text);
+    written = fwrite(text, 1, length, file);
+    fclose(file);
+
+    if (written != length) {
+        runtimeError(runtime, "write_file() failed to write entire file.");
+        return makeNone();
+    }
+
+    return makeBool(1);
+}
+
+static Value builtinAppendFile(Runtime* runtime, int argCount, Value* args) {
+    FILE* file;
+    const char* path;
+    const char* text;
+    size_t length;
+    size_t written;
+
+    if (argCount != 2) {
+        runtimeError(runtime, "append_file() expects exactly 2 arguments.");
+        return makeNone();
+    }
+
+    if (args[0].type != VAL_STRING || args[0].as.string == NULL) {
+        runtimeError(runtime, "append_file() expects the first argument to be a file path string.");
+        return makeNone();
+    }
+
+    if (args[1].type != VAL_STRING || args[1].as.string == NULL) {
+        runtimeError(runtime, "append_file() expects the second argument to be a string.");
+        return makeNone();
+    }
+
+    path = args[0].as.string;
+    text = args[1].as.string;
+
+    file = fopen(path, "ab");
+    if (file == NULL) {
+        runtimeError(runtime, "append_file() could not open file for appending.");
+        return makeNone();
+    }
+
+    length = strlen(text);
+    written = fwrite(text, 1, length, file);
+    fclose(file);
+
+    if (written != length) {
+        runtimeError(runtime, "append_file() failed to write entire file.");
+        return makeNone();
+    }
+
+    return makeBool(1);
+}
+
 void registerBuiltins(Environment* globals) {
     static NativeFunction printFunction = {
         "print",
@@ -342,6 +489,24 @@ void registerBuiltins(Environment* globals) {
         builtinHas
     };
 
+    static NativeFunction readFileFunction = {
+        "read_file",
+        1,
+        builtinReadFile
+    };
+
+    static NativeFunction writeFileFunction = {
+        "write_file",
+        2,
+        builtinWriteFile
+    };
+
+    static NativeFunction appendFileFunction = {
+        "append_file",
+        2,
+        builtinAppendFile
+    };
+
     envDefine(globals, "true", makeBool(1));
     envDefine(globals, "false", makeBool(0));
     envDefine(globals, "none", makeNone());
@@ -355,4 +520,7 @@ void registerBuiltins(Environment* globals) {
     envDefine(globals, "range", makeNativeFunction(&rangeFunction));
     envDefine(globals, "keys", makeNativeFunction(&keysFunction));
     envDefine(globals, "has", makeNativeFunction(&hasFunction));
+    envDefine(globals, "read_file", makeNativeFunction(&readFileFunction));
+    envDefine(globals, "write_file", makeNativeFunction(&writeFileFunction));
+    envDefine(globals, "append_file", makeNativeFunction(&appendFileFunction));
 }
