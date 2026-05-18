@@ -502,6 +502,24 @@ static char* resolveImportPath(Runtime* runtime, const char* importPath) {
     return normalized;
 }
 
+static void runtimeImportReadError(Runtime* runtime, const AstNode* node, const char* path) {
+    char message[256];
+
+    if (path == NULL) {
+        runtimeErrorAt(runtime, node, "Could not read imported file.");
+        return;
+    }
+
+    snprintf(
+        message,
+        sizeof(message),
+        "Could not read imported file: %s",
+        path
+    );
+
+    runtimeErrorAt(runtime, node, message);
+}
+
 static int assignLoopVariable(Runtime* runtime, Token nameToken, Value value) {
     char* name = copyTokenText(nameToken);
 
@@ -1905,8 +1923,8 @@ static ExecResult executeImportStatement(Runtime* runtime, AstNode* node) {
     free(rawPath);
 
     if (source == NULL) {
+        runtimeImportReadError(runtime, node, path);
         free(path);
-        runtimeErrorAt(runtime, node, "Could not read imported file.");
         return execError();
     }
 
@@ -1943,10 +1961,9 @@ static ExecResult executeImportStatement(Runtime* runtime, AstNode* node) {
     }
 
     module->ast = parseTokens(module->tokens);
-    if (module->ast == NULL) {
-        module->loading = 0;
+    if (source == NULL) {
+        runtimeImportReadError(runtime, node, path);
         free(path);
-        runtimeErrorAt(runtime, node, "Failed to parse imported file.");
         return execError();
     }
 

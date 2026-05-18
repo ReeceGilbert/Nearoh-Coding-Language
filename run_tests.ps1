@@ -28,6 +28,13 @@ $failTests = @(
             "examples/modules/bad_utils.nr",
             "Undefined variable."
         )
+    },
+    @{
+        Path = "examples/modules/missing_main.nr"
+        Expected = @(
+            "Could not read imported file:",
+            "examples/modules/missing_utils.nr"
+        )
     }
 )
 
