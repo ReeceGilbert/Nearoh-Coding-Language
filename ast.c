@@ -121,6 +121,7 @@ AstNode* newAstNode(AstNodeType type, Token token) {
 
     node->type = type;
     node->token = token;
+    node->sourcePath = NULL;
     return node;
 }
 
@@ -157,6 +158,119 @@ AstNode* makeLiteralNode(Token literal) {
     node->as.literalExpr.literal = literal;
 
     return node;
+}
+
+void annotateAstSourcePath(AstNode* node, const char* sourcePath) {
+    int i;
+
+    if (node == NULL) {
+        return;
+    }
+
+    node->sourcePath = sourcePath;
+
+    switch (node->type) {
+        case AST_MODULE:
+            for (i = 0; i < node->as.module.statements.count; i++) {
+                annotateAstSourcePath(node->as.module.statements.items[i], sourcePath);
+            }
+            break;
+
+        case AST_BLOCK:
+            for (i = 0; i < node->as.block.statements.count; i++) {
+                annotateAstSourcePath(node->as.block.statements.items[i], sourcePath);
+            }
+            break;
+
+        case AST_EXPR_STMT:
+            annotateAstSourcePath(node->as.exprStmt.expression, sourcePath);
+            break;
+
+        case AST_ASSIGN_STMT:
+            annotateAstSourcePath(node->as.assignStmt.target, sourcePath);
+            annotateAstSourcePath(node->as.assignStmt.value, sourcePath);
+            break;
+
+        case AST_RETURN_STMT:
+            annotateAstSourcePath(node->as.returnStmt.value, sourcePath);
+            break;
+
+        case AST_IF_STMT:
+            annotateAstSourcePath(node->as.ifStmt.condition, sourcePath);
+            annotateAstSourcePath(node->as.ifStmt.thenBlock, sourcePath);
+            annotateAstSourcePath(node->as.ifStmt.elseBranch, sourcePath);
+            break;
+
+        case AST_FOR_STMT:
+            annotateAstSourcePath(node->as.forStmt.target, sourcePath);
+            annotateAstSourcePath(node->as.forStmt.iterable, sourcePath);
+            annotateAstSourcePath(node->as.forStmt.body, sourcePath);
+            break;
+
+        case AST_WHILE_STMT:
+            annotateAstSourcePath(node->as.whileStmt.condition, sourcePath);
+            annotateAstSourcePath(node->as.whileStmt.body, sourcePath);
+            break;
+
+        case AST_FUNCTION_DEF:
+            annotateAstSourcePath(node->as.functionDef.body, sourcePath);
+            break;
+
+        case AST_CLASS_DEF:
+            annotateAstSourcePath(node->as.classDef.body, sourcePath);
+            break;
+
+        case AST_PASS_STMT:
+        case AST_BREAK_STMT:
+        case AST_CONTINUE_STMT:
+        case AST_IMPORT_STMT:
+        case AST_LITERAL_EXPR:
+        case AST_IDENTIFIER_EXPR:
+            break;
+
+        case AST_BINARY_EXPR:
+            annotateAstSourcePath(node->as.binaryExpr.left, sourcePath);
+            annotateAstSourcePath(node->as.binaryExpr.right, sourcePath);
+            break;
+
+        case AST_UNARY_EXPR:
+            annotateAstSourcePath(node->as.unaryExpr.operand, sourcePath);
+            break;
+
+        case AST_GROUPING_EXPR:
+            annotateAstSourcePath(node->as.groupingExpr.expression, sourcePath);
+            break;
+
+        case AST_CALL_EXPR:
+            annotateAstSourcePath(node->as.callExpr.callee, sourcePath);
+
+            for (i = 0; i < node->as.callExpr.arguments.count; i++) {
+                annotateAstSourcePath(node->as.callExpr.arguments.items[i], sourcePath);
+            }
+            break;
+
+        case AST_MEMBER_EXPR:
+            annotateAstSourcePath(node->as.memberExpr.object, sourcePath);
+            break;
+
+        case AST_LIST_EXPR:
+            for (i = 0; i < node->as.listExpr.elements.count; i++) {
+                annotateAstSourcePath(node->as.listExpr.elements.items[i], sourcePath);
+            }
+            break;
+
+        case AST_DICT_EXPR:
+            for (i = 0; i < node->as.dictExpr.keys.count; i++) {
+                annotateAstSourcePath(node->as.dictExpr.keys.items[i], sourcePath);
+                annotateAstSourcePath(node->as.dictExpr.values.items[i], sourcePath);
+            }
+            break;
+
+        case AST_INDEX_EXPR:
+            annotateAstSourcePath(node->as.indexExpr.object, sourcePath);
+            annotateAstSourcePath(node->as.indexExpr.index, sourcePath);
+            break;
+    }
 }
 
 void freeAst(AstNode* node) {

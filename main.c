@@ -165,6 +165,8 @@ int main(int argc, char** argv) {
         goto cleanup;
     }
 
+    annotateAstSourcePath(root, inputPath);
+
     if (mode == MODE_AST || mode == MODE_DEBUG) {
         printf("\n=== AST ===\n");
         printAst(root, 0);
@@ -191,7 +193,14 @@ int main(int argc, char** argv) {
     execResult = runtimeExecuteNode(&runtime, root);
 
     if (runtime.hadError) {
-        if (runtime.errorLine > 0) {
+        if (runtime.errorFile != NULL && runtime.errorLine > 0) {
+            fprintf(stderr,
+                    "Runtime error at %s line %d col %d: %s\n",
+                    runtime.errorFile,
+                    runtime.errorLine,
+                    runtime.errorColumn,
+                    runtime.errorMessage);
+        } else if (runtime.errorLine > 0) {
             fprintf(stderr,
                     "Runtime error at line %d col %d: %s\n",
                     runtime.errorLine,
@@ -200,6 +209,7 @@ int main(int argc, char** argv) {
         } else {
             fprintf(stderr, "Runtime error: %s\n", runtime.errorMessage);
         }
+
         exitCode = 1;
     }
 

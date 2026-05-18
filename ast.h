@@ -49,6 +49,7 @@ typedef struct {
 struct AstNode {
     AstNodeType type;
     Token token;
+    const char* sourcePath;
 
     union {
         struct {
@@ -167,6 +168,8 @@ AstNode* makeBinaryNode(Token op, AstNode* left, AstNode* right);
 AstNode* makeUnaryNode(Token op, AstNode* operand);
 AstNode* makeIdentifierNode(Token name);
 AstNode* makeLiteralNode(Token literal);
+
+void annotateAstSourcePath(AstNode* node, const char* sourcePath);
 
 void printAst(const AstNode* node, int depth);
 void freeAst(AstNode* node);

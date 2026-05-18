@@ -1950,6 +1950,8 @@ static ExecResult executeImportStatement(Runtime* runtime, AstNode* node) {
         return execError();
     }
 
+    annotateAstSourcePath(module->ast, module->path);
+
     if (!pushCurrentFile(runtime, path)) {
         module->loading = 0;
         free(path);
@@ -1976,6 +1978,7 @@ void runtimeInit(Runtime* runtime) {
     envInit(&runtime->globals, NULL);
     runtime->current = &runtime->globals;
     runtime->hadError = 0;
+    runtime->errorFile = NULL;
     runtime->errorLine = 0;
     runtime->errorColumn = 0;
     runtime->errorMessage[0] = '\0';
@@ -2021,6 +2024,7 @@ void runtimeFree(Runtime* runtime) {
 
 void runtimeError(Runtime* runtime, const char* message) {
     runtime->hadError = 1;
+    runtime->errorFile = NULL;
     runtime->errorLine = 0;
     runtime->errorColumn = 0;
 
@@ -2037,9 +2041,11 @@ void runtimeErrorAt(Runtime* runtime, const AstNode* node, const char* message) 
     runtime->hadError = 1;
 
     if (node != NULL) {
+        runtime->errorFile = node->sourcePath;
         runtime->errorLine = node->token.line;
         runtime->errorColumn = node->token.column;
     } else {
+        runtime->errorFile = NULL;
         runtime->errorLine = 0;
         runtime->errorColumn = 0;
     }

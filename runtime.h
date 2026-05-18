@@ -30,6 +30,7 @@ typedef struct Runtime {
     Environment globals;
     Environment* current;
     int hadError;
+    const char* errorFile;
     int errorLine;
     int errorColumn;
     char errorMessage[256];
