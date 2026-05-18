@@ -840,6 +840,252 @@ static Value builtinSubstr(Runtime* runtime, int argCount, Value* args) {
     return makeStringOwned(result);
 }
 
+static Value builtinSplit(Runtime* runtime, int argCount, Value* args) {
+    const char* text;
+    const char* separator;
+    const char* start;
+    const char* match;
+    ListObject* result;
+    size_t sepLen;
+
+    if (argCount != 2) {
+        runtimeError(runtime, "split() expects exactly 2 arguments.");
+        return makeNone();
+    }
+
+    if (args[0].type != VAL_STRING || args[0].as.string == NULL) {
+        runtimeError(runtime, "split() expects the first argument to be a string.");
+        return makeNone();
+    }
+
+    if (args[1].type != VAL_STRING || args[1].as.string == NULL) {
+        runtimeError(runtime, "split() expects the second argument to be a string.");
+        return makeNone();
+    }
+
+    text = args[0].as.string;
+    separator = args[1].as.string;
+    sepLen = strlen(separator);
+
+    if (sepLen == 0) {
+        runtimeError(runtime, "split() separator cannot be empty.");
+        return makeNone();
+    }
+
+    result = createListObject();
+    if (result == NULL) {
+        runtimeError(runtime, "Out of memory while creating split list.");
+        return makeNone();
+    }
+
+    start = text;
+
+    while ((match = strstr(start, separator)) != NULL) {
+        size_t length = (size_t)(match - start);
+        char* part = (char*)malloc(length + 1);
+        Value partValue;
+
+        if (part == NULL) {
+            freeValue(&(Value){ .type = VAL_LIST, .as.list = result });
+            runtimeError(runtime, "Out of memory while splitting string.");
+            return makeNone();
+        }
+
+        memcpy(part, start, length);
+        part[length] = '\0';
+
+        partValue = makeStringOwned(part);
+
+        if (!listAppend(result, partValue)) {
+            freeValue(&partValue);
+            freeValue(&(Value){ .type = VAL_LIST, .as.list = result });
+            runtimeError(runtime, "Out of memory while adding split part.");
+            return makeNone();
+        }
+
+        freeValue(&partValue);
+        start = match + sepLen;
+    }
+
+    {
+        char* finalPart = (char*)malloc(strlen(start) + 1);
+        Value finalValue;
+
+        if (finalPart == NULL) {
+            freeValue(&(Value){ .type = VAL_LIST, .as.list = result });
+            runtimeError(runtime, "Out of memory while finishing split string.");
+            return makeNone();
+        }
+
+        strcpy(finalPart, start);
+        finalValue = makeStringOwned(finalPart);
+
+        if (!listAppend(result, finalValue)) {
+            freeValue(&finalValue);
+            freeValue(&(Value){ .type = VAL_LIST, .as.list = result });
+            runtimeError(runtime, "Out of memory while adding final split part.");
+            return makeNone();
+        }
+
+        freeValue(&finalValue);
+    }
+
+    return makeList(result);
+}
+
+static Value builtinJoin(Runtime* runtime, int argCount, Value* args) {
+    ListObject* list;
+    const char* separator;
+    size_t sepLen;
+    size_t totalLength = 0;
+    char* result;
+    char* writeAt;
+    int i;
+
+    if (argCount != 2) {
+        runtimeError(runtime, "join() expects exactly 2 arguments.");
+        return makeNone();
+    }
+
+    if (args[0].type != VAL_LIST || args[0].as.list == NULL) {
+        runtimeError(runtime, "join() expects the first argument to be a list.");
+        return makeNone();
+    }
+
+    if (args[1].type != VAL_STRING || args[1].as.string == NULL) {
+        runtimeError(runtime, "join() expects the second argument to be a string.");
+        return makeNone();
+    }
+
+    list = args[0].as.list;
+    separator = args[1].as.string;
+    sepLen = strlen(separator);
+
+    for (i = 0; i < list->count; i++) {
+        if (list->items[i].type != VAL_STRING || list->items[i].as.string == NULL) {
+            runtimeError(runtime, "join() expects a list containing only strings.");
+            return makeNone();
+        }
+
+        totalLength += strlen(list->items[i].as.string);
+
+        if (i > 0) {
+            totalLength += sepLen;
+        }
+    }
+
+    result = (char*)malloc(totalLength + 1);
+    if (result == NULL) {
+        runtimeError(runtime, "Out of memory while joining strings.");
+        return makeNone();
+    }
+
+    writeAt = result;
+
+    for (i = 0; i < list->count; i++) {
+        const char* part = list->items[i].as.string;
+        size_t partLen = strlen(part);
+
+        if (i > 0 && sepLen > 0) {
+            memcpy(writeAt, separator, sepLen);
+            writeAt += sepLen;
+        }
+
+        memcpy(writeAt, part, partLen);
+        writeAt += partLen;
+    }
+
+    *writeAt = '\0';
+
+    return makeStringOwned(result);
+}
+
+static Value builtinReplace(Runtime* runtime, int argCount, Value* args) {
+    const char* text;
+    const char* oldText;
+    const char* newText;
+    const char* scan;
+    const char* match;
+    char* result;
+    char* writeAt;
+    size_t oldLen;
+    size_t newLen;
+    size_t totalLength;
+    int count = 0;
+
+    if (argCount != 3) {
+        runtimeError(runtime, "replace() expects exactly 3 arguments.");
+        return makeNone();
+    }
+
+    if (args[0].type != VAL_STRING || args[0].as.string == NULL) {
+        runtimeError(runtime, "replace() expects the first argument to be a string.");
+        return makeNone();
+    }
+
+    if (args[1].type != VAL_STRING || args[1].as.string == NULL) {
+        runtimeError(runtime, "replace() expects the second argument to be a string.");
+        return makeNone();
+    }
+
+    if (args[2].type != VAL_STRING || args[2].as.string == NULL) {
+        runtimeError(runtime, "replace() expects the third argument to be a string.");
+        return makeNone();
+    }
+
+    text = args[0].as.string;
+    oldText = args[1].as.string;
+    newText = args[2].as.string;
+
+    oldLen = strlen(oldText);
+    newLen = strlen(newText);
+
+    if (oldLen == 0) {
+        runtimeError(runtime, "replace() old text cannot be empty.");
+        return makeNone();
+    }
+
+    scan = text;
+
+    while ((match = strstr(scan, oldText)) != NULL) {
+        count++;
+        scan = match + oldLen;
+    }
+
+    totalLength = strlen(text);
+
+    if (newLen > oldLen) {
+        totalLength += (newLen - oldLen) * (size_t)count;
+    } else {
+        totalLength -= (oldLen - newLen) * (size_t)count;
+    }
+
+    result = (char*)malloc(totalLength + 1);
+    if (result == NULL) {
+        runtimeError(runtime, "Out of memory while replacing string.");
+        return makeNone();
+    }
+
+    scan = text;
+    writeAt = result;
+
+    while ((match = strstr(scan, oldText)) != NULL) {
+        size_t beforeLen = (size_t)(match - scan);
+
+        memcpy(writeAt, scan, beforeLen);
+        writeAt += beforeLen;
+
+        memcpy(writeAt, newText, newLen);
+        writeAt += newLen;
+
+        scan = match + oldLen;
+    }
+
+    strcpy(writeAt, scan);
+
+    return makeStringOwned(result);
+}
+
 void registerBuiltins(Environment* globals) {
     static NativeFunction printFunction = {
         "print",
@@ -1003,6 +1249,24 @@ void registerBuiltins(Environment* globals) {
         builtinSubstr
     };
 
+    static NativeFunction splitFunction = {
+        "split",
+        2,
+        builtinSplit
+    };
+
+    static NativeFunction joinFunction = {
+        "join",
+        2,
+        builtinJoin
+    };
+
+    static NativeFunction replaceFunction = {
+        "replace",
+        3,
+        builtinReplace
+    };
+
     envDefine(globals, "true", makeBool(1));
     envDefine(globals, "false", makeBool(0));
     envDefine(globals, "none", makeNone());
@@ -1034,4 +1298,7 @@ void registerBuiltins(Environment* globals) {
     envDefine(globals, "trim", makeNativeFunction(&trimFunction));
     envDefine(globals, "contains", makeNativeFunction(&containsFunction));
     envDefine(globals, "substr", makeNativeFunction(&substrFunction));
+    envDefine(globals, "split", makeNativeFunction(&splitFunction));
+    envDefine(globals, "join", makeNativeFunction(&joinFunction));
+    envDefine(globals, "replace", makeNativeFunction(&replaceFunction));
 }

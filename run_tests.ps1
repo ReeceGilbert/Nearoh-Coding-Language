@@ -14,7 +14,8 @@ $passTests = @(
     "examples/core_stress.nr",
     "examples/arena_showcase.nr",
     "examples/fancy_builtins.nr",
-    "examples/string_builtins.nr"
+    "examples/string_builtins.nr",
+    "examples/string_tools_advanced.nr"
 )
 
 $failTests = @(
@@ -102,6 +103,30 @@ $failTests = @(
         Path = "examples/errors/bad_substr_length.nr"
         Expected = @(
             "substr() length cannot be negative."
+        )
+    },
+    @{
+        Path = "examples/errors/bad_split_empty_separator.nr"
+        Expected = @(
+            "split() separator cannot be empty."
+        )
+    },
+    @{
+        Path = "examples/errors/bad_join_non_list.nr"
+        Expected = @(
+            "join() expects the first argument to be a list."
+        )
+    },
+    @{
+        Path = "examples/errors/bad_join_non_string_item.nr"
+        Expected = @(
+            "join() expects a list containing only strings."
+        )
+    },
+    @{
+        Path = "examples/errors/bad_replace_empty_old.nr"
+        Expected = @(
+            "replace() old text cannot be empty."
         )
     }
 )
