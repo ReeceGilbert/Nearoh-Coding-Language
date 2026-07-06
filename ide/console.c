@@ -34,6 +34,7 @@ static int console_ensure_capacity(ConsoleBuffer* console, int needed) {
 void console_init(ConsoleBuffer* console) {
     console->capacity = CONSOLE_START_CAPACITY;
     console->length = 0;
+    console->scroll_y = 0;
     console->text = (char*)malloc((size_t)console->capacity);
 
     if (console->text != NULL) {
@@ -59,6 +60,7 @@ void console_clear(ConsoleBuffer* console) {
         return;
     }
 
+    console->scroll_y = 0;
     console->length = 0;
     console->text[0] = '\0';
 }
@@ -104,7 +106,7 @@ void console_paint(HDC dc, RECT rect, ConsoleBuffer* console) {
 
     text = console->text;
     x = rect.left + 12;
-    y = rect.top + 12;
+    y = rect.top + 12 - console->scroll_y;
     line_height = 18;
     line_start = 0;
 
@@ -129,4 +131,16 @@ void console_paint(HDC dc, RECT rect, ConsoleBuffer* console) {
     SelectClipRgn(dc, old_clip);
     DeleteObject(console_clip);
     DeleteObject(old_clip);
+}
+
+void console_scroll(ConsoleBuffer* console, int amount) {
+    if (console == NULL) {
+        return;
+    }
+
+    console->scroll_y += amount;
+
+    if (console->scroll_y < 0) {
+        console->scroll_y = 0;
+    }
 }

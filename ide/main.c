@@ -1,6 +1,7 @@
 // ide/main.c
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <windowsx.h>
 #include "file_io.h"
 
 #include "console.h"
@@ -11,6 +12,21 @@
 
 #define WINDOW_CLASS_NAME "NearohIDEWindowClass"
 #define WINDOW_TITLE      "Nearoh IDE"
+
+typedef enum {
+    IDE_RUN_NORMAL,
+    IDE_RUN_TOKENS,
+    IDE_RUN_AST,
+    IDE_RUN_DEBUG
+} IdeRunMode;
+
+typedef enum {
+    TOOLBAR_BUTTON_NONE,
+    TOOLBAR_BUTTON_RUN,
+    TOOLBAR_BUTTON_TOKENS,
+    TOOLBAR_BUTTON_AST,
+    TOOLBAR_BUTTON_DEBUG
+} ToolbarButton;
 
 static TextBuffer editor_buffer;
 static EditorView editor_view;
@@ -24,9 +40,25 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM l
 static RECT get_editor_rect(HWND hwnd);
 static void clamp_editor_scroll(HWND hwnd);
 static void editor_changed(HWND hwnd);
-static void run_current_file(HWND hwnd);
+static void run_current_file(HWND hwnd, IdeRunMode mode);
+
+static RECT toolbar_button_rect(int index);
+static void draw_toolbar_button(HDC dc, int index, const char* text);
+static ToolbarButton toolbar_hit_test(POINT p);
 
 static char current_file_path[MAX_PATH];
+
+static RECT get_console_rect(HWND hwnd) {
+    RECT client_rect;
+    RECT console_rect;
+
+    GetClientRect(hwnd, &client_rect);
+
+    console_rect = client_rect;
+    console_rect.top = client_rect.bottom - 180;
+
+    return console_rect;
+}
 
 static void set_repo_paths(void) {
     DWORD length;
@@ -56,10 +88,12 @@ static void set_repo_paths(void) {
     lstrcatA(nearoh_exe_path, "\\cmake-build-debug\\nearoh.exe");
 }
 
-static void run_current_file(HWND hwnd) {
+static void run_current_file(HWND hwnd, IdeRunMode mode) {
     char command[2048];
     char output[65536];
     int exit_code;
+    const char* mode_flag = "";
+    const char* mode_name = "Run";
 
     if (!file_save_from_buffer(current_file_path, &editor_buffer)) {
         console_clear(&console_buffer);
@@ -68,12 +102,39 @@ static void run_current_file(HWND hwnd) {
         return;
     }
 
+    switch (mode) {
+        case IDE_RUN_NORMAL:
+            mode_flag = "";
+            mode_name = "Run";
+            break;
+
+        case IDE_RUN_TOKENS:
+            mode_flag = "--tokens ";
+            mode_name = "Tokens";
+            break;
+
+        case IDE_RUN_AST:
+            mode_flag = "--ast ";
+            mode_name = "AST";
+            break;
+
+        case IDE_RUN_DEBUG:
+            mode_flag = "--debug ";
+            mode_name = "Debug";
+            break;
+    }
+
     console_clear(&console_buffer);
+
+    console_append(&console_buffer, "=== Nearoh ");
+    console_append(&console_buffer, mode_name);
+    console_append(&console_buffer, " ===\n\n");
 
     wsprintfA(
         command,
-        "\"%s\" \"%s\"",
+        "\"%s\" %s\"%s\"",
         nearoh_exe_path,
+        mode_flag,
         current_file_path
     );
 
@@ -165,6 +226,71 @@ static void editor_changed(HWND hwnd) {
     InvalidateRect(hwnd, NULL, TRUE);
 }
 
+static RECT toolbar_button_rect(int index) {
+    RECT r;
+
+    r.left = 120 + index * 92;
+    r.top = 8;
+    r.right = r.left + 82;
+    r.bottom = 34;
+
+    return r;
+}
+
+static void draw_toolbar_button(HDC dc, int index, const char* text) {
+    RECT r;
+    HBRUSH brush;
+    HBRUSH old_brush;
+    HPEN pen;
+    HPEN old_pen;
+
+    r = toolbar_button_rect(index);
+
+    brush = CreateSolidBrush(RGB(48, 48, 56));
+    old_brush = SelectObject(dc, brush);
+
+    pen = CreatePen(PS_SOLID, 1, RGB(72, 72, 84));
+    old_pen = SelectObject(dc, pen);
+
+    Rectangle(dc, r.left, r.top, r.right, r.bottom);
+
+    SetBkMode(dc, TRANSPARENT);
+    SetTextColor(dc, RGB(235, 235, 240));
+    DrawTextA(dc, text, -1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+    SelectObject(dc, old_pen);
+    DeleteObject(pen);
+
+    SelectObject(dc, old_brush);
+    DeleteObject(brush);
+}
+
+static ToolbarButton toolbar_hit_test(POINT p) {
+    RECT r;
+
+    r = toolbar_button_rect(0);
+    if (PtInRect(&r, p)) {
+        return TOOLBAR_BUTTON_RUN;
+    }
+
+    r = toolbar_button_rect(1);
+    if (PtInRect(&r, p)) {
+        return TOOLBAR_BUTTON_TOKENS;
+    }
+
+    r = toolbar_button_rect(2);
+    if (PtInRect(&r, p)) {
+        return TOOLBAR_BUTTON_AST;
+    }
+
+    r = toolbar_button_rect(3);
+    if (PtInRect(&r, p)) {
+        return TOOLBAR_BUTTON_DEBUG;
+    }
+
+    return TOOLBAR_BUTTON_NONE;
+}
+
 static void paint_window(HWND hwnd) {
     PAINTSTRUCT ps;
     HDC dc;
@@ -206,12 +332,16 @@ static void paint_window(HWND hwnd) {
     DeleteObject(editor_brush);
 
     SetBkMode(dc, TRANSPARENT);
-    SetTextColor(dc, RGB(230, 230, 235));
+    SetTextColor(dc, RGB(235, 235, 240));
+    TextOutA(dc, 16, 13, "Nearoh IDE", 10);
 
-    TextOutA(dc, 14, 12, "Nearoh IDE", 10);
-    console_paint(dc, console_rect, &console_buffer);
+    draw_toolbar_button(dc, 0, "Run");
+    draw_toolbar_button(dc, 1, "Tokens");
+    draw_toolbar_button(dc, 2, "AST");
+    draw_toolbar_button(dc, 3, "Debug");
 
     editor_paint(dc, editor_rect, &editor_buffer, &editor_view);
+    console_paint(dc, console_rect, &console_buffer);
 
     EndPaint(hwnd, &ps);
 }
@@ -386,7 +516,12 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM l
             }
 
             if ((GetKeyState(VK_CONTROL) & 0x8000) && wparam == 'R') {
-                run_current_file(hwnd);
+                run_current_file(hwnd, IDE_RUN_NORMAL);
+                return 0;
+            }
+
+            if ((GetKeyState(VK_CONTROL) & 0x8000) && wparam == 'T') {
+                run_current_file(hwnd, IDE_RUN_TOKENS);
                 return 0;
             }
 
@@ -397,15 +532,120 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM l
             return 0;
 
         case WM_MOUSEWHEEL: {
-            int delta = GET_WHEEL_DELTA_WPARAM(wparam);
-            int lines = delta / WHEEL_DELTA;
+            POINT mouse;
+            RECT console_rect;
+            int delta;
+            int lines;
 
-            editor_view.scroll_y -= lines * editor_view.line_height;
+            mouse.x = GET_X_LPARAM(lparam);
+            mouse.y = GET_Y_LPARAM(lparam);
+            ScreenToClient(hwnd, &mouse);
 
-            clamp_editor_scroll(hwnd);
+            console_rect = get_console_rect(hwnd);
+
+            delta = GET_WHEEL_DELTA_WPARAM(wparam);
+            lines = delta / WHEEL_DELTA;
+
+            if (PtInRect(&console_rect, mouse)) {
+                console_scroll(&console_buffer, -lines * 18 * 3);
+            } else {
+                editor_view.scroll_y -= lines * editor_view.line_height;
+                clamp_editor_scroll(hwnd);
+            }
 
             InvalidateRect(hwnd, NULL, TRUE);
             return 0;
+        }
+
+        case WM_LBUTTONDOWN: {
+            POINT mouse;
+            ToolbarButton button;
+
+            mouse.x = (short)LOWORD(lparam);
+            mouse.y = (short)HIWORD(lparam);
+
+            button = toolbar_hit_test(mouse);
+
+            if (button != TOOLBAR_BUTTON_NONE) {
+                switch (button) {
+                    case TOOLBAR_BUTTON_RUN:
+                        run_current_file(hwnd, IDE_RUN_NORMAL);
+                        return 0;
+
+                    case TOOLBAR_BUTTON_TOKENS:
+                        run_current_file(hwnd, IDE_RUN_TOKENS);
+                        return 0;
+
+                    case TOOLBAR_BUTTON_AST:
+                        run_current_file(hwnd, IDE_RUN_AST);
+                        return 0;
+
+                    case TOOLBAR_BUTTON_DEBUG:
+                        run_current_file(hwnd, IDE_RUN_DEBUG);
+                        return 0;
+
+                    default:
+                        return 0;
+                }
+            }
+
+            {
+                RECT editor_rect;
+
+                editor_rect = get_editor_rect(hwnd);
+
+                if (PtInRect(&editor_rect, mouse)) {
+                    HDC dc;
+
+                    dc = GetDC(hwnd);
+
+                    editor_set_cursor_from_point(
+                        dc,
+                        &editor_buffer,
+                        &editor_view,
+                        editor_rect,
+                        mouse.x,
+                        mouse.y
+                    );
+
+                    ReleaseDC(hwnd, dc);
+
+                    editor_changed(hwnd);
+                    return 0;
+                }
+            }
+
+            return 0;
+        }
+
+        case WM_SETCURSOR: {
+            POINT mouse;
+            RECT editor_rect;
+            RECT console_rect;
+
+            GetCursorPos(&mouse);
+            ScreenToClient(hwnd, &mouse);
+
+            editor_rect = get_editor_rect(hwnd);
+            console_rect = get_console_rect(hwnd);
+
+            if (toolbar_hit_test(mouse) != TOOLBAR_BUTTON_NONE) {
+                SetCursor(LoadCursor(NULL, IDC_ARROW));
+                return TRUE;
+            }
+
+            if (PtInRect(&editor_rect, mouse)) {
+                SetCursor(LoadCursor(NULL, IDC_IBEAM));
+                return TRUE;
+            }
+
+            if (PtInRect(&console_rect, mouse)) {
+                SetCursor(LoadCursor(NULL, IDC_ARROW));
+                return TRUE;
+            }
+
+            SetCursor(LoadCursor(NULL, IDC_ARROW));
+            return TRUE;
         }
 
         default:

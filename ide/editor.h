@@ -15,5 +15,13 @@ typedef struct {
 void editor_view_init(EditorView* view);
 void editor_paint(HDC dc, RECT rect, TextBuffer* buffer, EditorView* view);
 void editor_ensure_cursor_visible(TextBuffer* buffer, EditorView* view, RECT editor_rect);
+void editor_set_cursor_from_point(
+    HDC dc,
+    TextBuffer* buffer,
+    EditorView* view,
+    RECT editor_rect,
+    int mouse_x,
+    int mouse_y
+);
 
 #endif
