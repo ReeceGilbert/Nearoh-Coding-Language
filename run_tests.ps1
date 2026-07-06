@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Continue"
+what $ErrorActionPreference = "Continue"
 
 $exe = ".\cmake-build-debug\nearoh.exe"
 
