@@ -3,21 +3,11 @@
 #include "env.h"
 #include "lexer.h"
 #include "parser.h"
+#include "module.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-struct ImportedModule {
-    char* path;
-    int loaded;
-    int loading;
-
-    char* source;
-    TokenArray* tokens;
-    Diagnostics* diagnostics;
-    AstNode* ast;
-};
 
 static char* copyTokenText(Token token) {
     char* text = (char*)malloc((size_t)token.length + 1);

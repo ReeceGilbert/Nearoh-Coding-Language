@@ -4,6 +4,7 @@
 #include "ast.h"
 #include "env.h"
 #include "value.h"
+#include "module.h"
 
 typedef enum {
     FLOW_NORMAL,
