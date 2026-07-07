@@ -510,6 +510,19 @@ static AstNode* parseImportStatement(ParseState* parser) {
 
     node = newAstNode(AST_IMPORT_STMT, *importToken);
     node->as.importStmt.path = *pathToken;
+    node->as.importStmt.hasAlias = false;
+
+    if (parserMatch(parser, TOKEN_AS)) {
+        Token* aliasToken = parserConsume(parser, TOKEN_IDENTIFIER, "Expected alias name after 'as'.");
+
+        if (aliasToken == NULL) {
+            freeAst(node);
+            return NULL;
+        }
+
+        node->as.importStmt.alias = *aliasToken;
+        node->as.importStmt.hasAlias = true;
+    }
 
     if (!consumeStatementTerminator(parser, "Expected newline after import statement.")) {
         freeAst(node);

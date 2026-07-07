@@ -517,6 +517,12 @@ void printAst(const AstNode* node, int depth) {
             printIndent(depth);
             printf("IMPORT ");
             printTokenLexeme(node->as.importStmt.path);
+
+            if (node->as.importStmt.hasAlias) {
+                printf(" as ");
+                printTokenLexeme(node->as.importStmt.alias);
+            }
+
             printf("\n");
             break;
 

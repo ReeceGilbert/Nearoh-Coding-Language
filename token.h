@@ -56,7 +56,8 @@ typedef enum {
     TOKEN_PASS,
     TOKEN_BREAK,
     TOKEN_CONTINUE,
-    TOKEN_IMPORT
+    TOKEN_IMPORT,
+    TOKEN_AS,
 } TokenType;
 
 typedef struct {

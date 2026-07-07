@@ -279,6 +279,7 @@ static TokenType identifierType(Scanner* scanner) {
     if (stringsEqual(text, length, "break"))    return TOKEN_BREAK;
     if (stringsEqual(text, length, "continue")) return TOKEN_CONTINUE;
     if (stringsEqual(text, length, "import"))   return TOKEN_IMPORT;
+    if (stringsEqual(text, length, "as"))       return TOKEN_AS;
 
     return TOKEN_IDENTIFIER;
 }
@@ -698,6 +699,7 @@ const char* tokenTypeToString(TokenType type) {
         case TOKEN_BREAK:         return "BREAK";
         case TOKEN_CONTINUE:      return "CONTINUE";
         case TOKEN_IMPORT:        return "IMPORT";
+        case TOKEN_AS:            return "AS";
     }
 
     return "INVALID";

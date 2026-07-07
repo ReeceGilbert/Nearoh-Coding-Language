@@ -1,6 +1,7 @@
 #ifndef AST_H
 #define AST_H
 
+#include <stdbool.h>
 #include "token.h"
 
 typedef enum {
@@ -103,6 +104,8 @@ struct AstNode {
 
         struct {
             Token path;
+            Token alias;
+            bool hasAlias;
         } importStmt;
 
         struct {
