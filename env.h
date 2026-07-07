@@ -20,6 +20,7 @@ void envFree(Environment* env);
 
 int envDefine(Environment* env, const char* name, Value value);
 int envAssign(Environment* env, const char* name, Value value);
+int envAssignCurrent(Environment* env, const char* name, Value value);
 
 int envGet(const Environment* env, const char* name, Value* outValue);
 Value* envGetRef(Environment* env, const char* name);

@@ -138,6 +138,24 @@ int envAssign(Environment* env, const char* name, Value value) {
     return 0;
 }
 
+int envAssignCurrent(Environment* env, const char* name, Value value) {
+    int i;
+
+    if (env == NULL || name == NULL) {
+        return 0;
+    }
+
+    for (i = 0; i < env->count; i++) {
+        if (strcmp(env->bindings[i].name, name) == 0) {
+            freeValue(&env->bindings[i].value);
+            env->bindings[i].value = copyValue(&value);
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 int envGet(const Environment* env, const char* name, Value* outValue) {
     int i;
 

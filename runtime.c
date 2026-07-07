@@ -528,7 +528,7 @@ static int assignLoopVariable(Runtime* runtime, Token nameToken, Value value) {
         return 0;
     }
 
-    if (!envAssign(runtime->current, name, value)) {
+    if (!envAssignCurrent(runtime->current, name, value)) {
         if (!envDefine(runtime->current, name, value)) {
             free(name);
             runtimeError(runtime, "Failed to assign loop variable.");
@@ -1622,7 +1622,7 @@ static ExecResult executeAssign(Runtime* runtime, AstNode* node) {
             return execError();
         }
 
-        if (!envAssign(runtime->current, name, rhs)) {
+        if (!envAssignCurrent(runtime->current, name, rhs)) {
             if (!envDefine(runtime->current, name, rhs)) {
                 free(name);
                 freeValue(&rhs);

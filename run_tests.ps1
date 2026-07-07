@@ -1,8 +1,20 @@
-what $ErrorActionPreference = "Continue"
+$ErrorActionPreference = "Continue"
 
 $exe = ".\cmake-build-debug\nearoh.exe"
 
 $passTests = @(
+    "tests/pass/method_return_value.nr",
+    "tests/pass/dict_update_lookup.nr",
+    "tests/pass/list_index_append.nr",
+    "tests/pass/boolean_short_circuit.nr",
+    "tests/pass/while_counter.nr",
+    "tests/pass/for_loop_function_scope.nr",
+    "tests/pass/for_loop_variable_scope.nr",
+    "tests/pass/function_return_chain.nr",
+    "tests/pass/object_list_mutation.nr",
+    "tests/pass/two_instances_separate_state.nr",
+    "tests/pass/function_scope.nr",
+    "tests/pass/arithmetic_precedence.nr",
     "examples/hello.nr",
     "examples/functions.nr",
     "examples/classes.nr",
@@ -19,6 +31,18 @@ $passTests = @(
 )
 
 $failTests = @(
+    @{
+        Path = "tests/fail/bad_undefined_member.nr"
+        Expected = "Undefined member."
+    },
+    @{
+        Path = "tests/fail/bad_list_index_out_of_bounds.nr"
+        Expected = "List index out of bounds."
+    },
+    @{
+        Path = "tests/fail/bad_constructor_arg_count.nr"
+        Expected = "Wrong number of arguments for function call."
+    },
     @{
         Path = "examples/import_cycle_a.nr"
         Expected = @(
@@ -135,14 +159,32 @@ foreach ($test in $passTests) {
     Write-Host ""
     Write-Host "=== PASS TEST $test ==="
 
-    & $exe $test
+    $output = & $exe $test
     $exitCode = $LASTEXITCODE
 
+    $output | ForEach-Object { Write-Host $_ }
+
     if ($exitCode -ne 0) {
-        Write-Host ""
-        Write-Host "FAILED: expected success but got exit code $exitCode"
-        Write-Host "TEST: $test"
-        exit $exitCode
+        Write-Host "FAIL: $test should have passed"
+        exit 1
+    }
+
+    $testName = [System.IO.Path]::GetFileNameWithoutExtension($test)
+    $expectedPath = "tests/expected/$testName.txt"
+
+    if (Test-Path $expectedPath) {
+        $expected = Get-Content $expectedPath
+
+        if (($output -join "`n") -ne ($expected -join "`n")) {
+            Write-Host "FAIL: output mismatch for $test"
+            Write-Host ""
+            Write-Host "Expected:"
+            $expected | ForEach-Object { Write-Host $_ }
+            Write-Host ""
+            Write-Host "Actual:"
+            $output | ForEach-Object { Write-Host $_ }
+            exit 1
+        }
     }
 }
 
