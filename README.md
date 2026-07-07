@@ -40,9 +40,9 @@ This project is being built to become a serious personal-use language, not just 
 
 ## Major Runtime Foundation Milestone Reached
 
-Nearoh now supports real multi-feature programs, expanded native builtins, file I/O, and multi-file execution through a tracked import system.
+Nearoh now supports real multi-feature programs, expanded native built-ins, file I/O, multi-file execution through a tracked import system, and an early native IDE shell built from scratch in C with Win32/GDI.
 
-The language can run larger examples from the command line, inspect tokens and AST output, execute classes and object systems, mutate lists and dictionaries, use built-in utility functions, read and write files, import other `.nr` files, detect circular imports, skip duplicate imports, and report runtime errors with source-aware file/line/column diagnostics.
+The language can run larger examples from the command line or from the IDE, inspect tokens and AST output, execute classes and object systems, mutate lists and dictionaries, use built-in utility functions, read and write files, import other `.nr` files, detect circular imports, skip duplicate imports, and report runtime errors with source-aware file/line/column diagnostics.
 
 Implemented systems currently include:
 
@@ -50,7 +50,7 @@ Implemented systems currently include:
 - Parser
 - AST generation
 - Runtime evaluator
-- Scope / environment model
+- Scope/environment model
 - Variables and reassignment
 - Arithmetic
 - Strings
@@ -85,13 +85,19 @@ Implemented systems currently include:
 - Runtime file/line/column error reporting
 - Expected-failure regression tests
 - Debug / token / AST CLI modes
+- Early native Win32/GDI IDE shell
+- IDE editor buffer with typing, cursor movement, scrolling, and click-to-place cursor
+- IDE editor and console line numbers
+- IDE console output panel with scrolling
+- IDE toolbar buttons for Run, Tokens, AST, and Debug
+- IDE process runner with captured stdout/stderr
 - Core runtime safety checks
 
 ---
 
 # Builtins
 
-Nearoh currently includes the following native builtins:
+Nearoh currently includes the following native built-ins:
 
 - `print()`
 - `len()`
@@ -130,7 +136,7 @@ print(keys(stats))
 
 # File I/O
 
-Nearoh supports basic file reading, writing, and appending through native builtins.
+Nearoh supports basic file reading, writing, and appending through native built-ins.
 
 ```python
 write_file("nearoh_file_test.txt", "Hello")
@@ -221,6 +227,51 @@ nearoh --debug examples/hello.nr
 - **--tokens** -> prints lexer output
 - **--ast** -> prints parsed AST
 - **--debug** -> prints source, tokens, AST, diagnostics, then execution
+
+---
+
+# Nearoh IDE
+
+Nearoh now includes an early native IDE prototype in the `ide/` folder.
+
+The IDE is not a web wrapper, tkinter app, or framework mockup. It is being built from scratch in C using the raw Win32 API and GDI.
+
+Current IDE features include:
+
+- Native Win32 window
+- Custom text buffer/editor
+- Typing and editing
+- Cursor movement
+- Mouse click-to-place cursor
+- Editor scrolling
+- Editor line numbers
+- Console output panel
+- Console line numbers
+- Console scrolling
+- Save/load support for the current working file
+- Toolbar buttons for Run, Tokens, AST, and Debug
+- Keyboard shortcuts for Run and Tokens
+- Captured stdout/stderr from the Nearoh executable
+- Absolute-path process launching with repo-root working directory handling
+
+Current IDE controls:
+
+- **Run button** -> executes the current `.nr` file
+- **Tokens button** -> runs `nearoh --tokens`
+- **AST button** -> runs `nearoh --ast`
+- **Debug button** -> runs `nearoh --debug`
+- **Ctrl+R** -> run current file
+- **Ctrl+T** -> inspect tokens
+- **Mouse wheel over editor** -> scroll editor
+- **Mouse wheel over console** -> scroll console
+
+Example build command:
+
+```bash
+gcc ide/main.c ide/buffer.c ide/editor.c ide/file_io.c ide/console.c ide/process.c -o ide/nearoh_ide.exe -lgdi32
+```
+
+This IDE is still early, but it already proves that Nearoh can be edited, run, inspected, and debugged from its own dedicated native tool instead of only from the command line.
 
 ---
 
@@ -402,7 +453,7 @@ Recent cleanup and stabilization work included:
 - Improved parser structure and error handling
 - AST cleanup and memory handling fixes
 - Source-path annotation for AST nodes
-- Value / list / dictionary system improvements
+- Value/list / dictionary system improvements
 - Environment system cleanup
 - Better runtime diagnostics with source file, line, and column
 - Runtime import tracking
@@ -414,12 +465,14 @@ Recent cleanup and stabilization work included:
 - Safer project-wide organization
 - Fixed instance member container index assignment
 - Fixed dictionary mutation persistence
-- Added expanded utility builtins
-- Added string/number conversion builtins
+- Added expanded utility built-ins
+- Added string/number conversion built-ins
 - Added basic file I/O
 - Added regression-style example programs
 - Added expected-failure tests
 - Added `run_tests.ps1`
+- Added early native Win32/GDI IDE shell
+- Added IDE editor line numbers, console line numbers, toolbar run buttons, console rendering, and click-to-place cursor navigation
 
 Nearoh now has a stronger foundation for future growth.
 
@@ -446,6 +499,7 @@ Nearoh already includes real runtime behavior:
 - Command-line tooling
 - Debugging modes
 - Regression tests
+- Early native IDE tooling
 
 That means the project is moving into genuine language engineering territory.
 
@@ -459,10 +513,10 @@ Nearoh is still early, but it is already capable of running meaningful programs 
 
 - Continue improving diagnostics and error UX
 - Add more runtime safety checks
-- Improve builtin error behavior
-- Add more standard-library utilities
+- Improve built-in error behavior
+- Add more standard library utilities
 - Clean up import memory ownership further
-- Begin designing module namespaces / module objects
+- Begin designing module namespaces/module objects
 - Expand regression tests
 - Add more example programs
 
@@ -476,15 +530,15 @@ Nearoh is still early, but it is already capable of running meaningful programs 
 - File and path utilities
 - Tooling improvements
 - Cleaner automated test workflow
-- Minimal editor / IDE shell
+- Continue expanding the native IDE shell
 
 ## Long-Term
 
-- Native graphics / window bridge
-- Input / timing systems
+- Native graphics/window bridge
+- Input/timing systems
 - Larger standard library built in Nearoh
 - Bytecode VM or compiled backend research
-- Dedicated Nearoh editor / IDE
+- Dedicated Nearoh editor / IDE with project navigation, richer editing, and diagnostics
 - Possible self-hosted growth path
 
 ---
@@ -515,6 +569,6 @@ This project reflects years of programming curiosity, systems experimentation, g
 
 Nearoh is early, active, and growing quickly.
 
-The current stage is centered on strengthening the runtime, improving imports, expanding diagnostics, growing the builtin layer, adding regression tests, and preparing the project for more serious tooling and editor work.
+The current stage is centered on strengthening the runtime, improving imports, expanding diagnostics, growing the builtin layer, adding regression tests, and growing the new native IDE from a working shell into a more complete language tool.
 
-Every milestone is focused on turning Nearoh into a real usable language rather than a superficial prototype.
+Every milestone is focused on turning Nearoh into a real, usable language rather than a superficial prototype.
