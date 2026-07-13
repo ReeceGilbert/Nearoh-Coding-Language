@@ -6,19 +6,20 @@ Nearoh is not a toy parser or throwaway syntax experiment. It is being built as 
 
 Current repository size:
 
-* **11,065 total lines**
-* **111 files counted**
-* **2,492 lines in `runtime.c`**
+* **11,713 total lines**
+* **120 files counted**
+* **2,532 lines in `runtime.c`**
 * **1,304 lines in `builtins.c`**
-* **1,098 lines in `parser.c`**
-* **737 lines in `lexer.c`**
-* **696 lines in `value.c`**
-* **2,100+ lines of native IDE code**
-* **12 golden-output pass tests**
-* **4 custom expected-failure tests**
-* **Full regression suite passing**
+* **1,111 lines in `parser.c`**
+* **739 lines in `lexer.c`**
+* **687 lines in `value.c`**
+* **384 lines in the new garbage collector**
+* **1,600+ lines of native IDE implementation**
+* **15 custom pass tests**
+* **3 active custom expected-failure tests**
+* **Full regression suite passing under both GC stress mode and normal threshold-based collection**
 
-Nearoh has moved beyond just being a custom interpreter. It is becoming a small language ecosystem: language core, runtime, builtins, imports, examples, regression tests, CLI tooling, and an early native IDE.
+Nearoh has moved beyond just being a custom interpreter. It is becoming a small language ecosystem: language core, runtime, builtins, imports, examples, regression tests, CLI tooling, a native IDE, heap-managed closures, shared mutable object identity, and a real mark-and-sweep garbage collector.
 
 ## Links
 
@@ -57,7 +58,7 @@ This project is being built to become a serious personal-use language, not just 
 
 ## Runtime Foundation and Tooling Milestone
 
-Nearoh now supports real multi-feature programs, expanded native built-ins, file I/O, multi-file execution through a tracked import system, golden-output regression tests, expected-failure tests, and an early native IDE shell built from scratch in C with Win32/GDI.
+Nearoh now supports real multi-feature programs, expanded native built-ins, file I/O, multi-file execution through a tracked import system, golden-output regression tests, expected-failure tests, heap-allocated lexical environments, escaped closures, shared mutable container identity, cycle-safe printing, a non-moving mark-and-sweep garbage collector, and an early native IDE shell built from scratch in C with Win32/GDI.
 
 The language can run larger examples from the command line or from the IDE, inspect tokens and AST output, execute classes and object systems, mutate lists and dictionaries, use built-in utility functions, read and write files, import other `.nr` files, detect circular imports, skip duplicate imports, and report runtime errors with source-aware file/line/column diagnostics.
 
@@ -68,6 +69,15 @@ Implemented systems currently include:
 * AST generation
 * Runtime evaluator
 * Scope/environment model
+* Heap-allocated lexical environments
+* Escaped closures
+* Shared mutable object identity
+* Non-moving mark-and-sweep garbage collector
+* Root marking and gray-stack tracing
+* Cycle collection
+* Threshold-based automatic collection at safe points
+* Optional full GC stress mode
+* Cycle-safe list and dictionary printing
 * Variables and reassignment
 * Arithmetic
 * Strings
@@ -118,21 +128,22 @@ Implemented systems currently include:
 Current counted project size:
 
 ```text
-TOTAL LINES: 11,065
-FILES COUNTED: 111
+TOTAL LINES: 11,713
+FILES COUNTED: 120
 ```
 
 Largest core files:
 
 ```text
-runtime.c       2,492 lines
+runtime.c       2,532 lines
 builtins.c      1,304 lines
-parser.c        1,098 lines
-lexer.c           737 lines
-value.c           696 lines
-ast.c             634 lines
+parser.c        1,111 lines
+lexer.c           739 lines
+value.c           687 lines
+ast.c             640 lines
+gc.c              384 lines
 main.c            231 lines
-env.c             214 lines
+env.c             229 lines
 ```
 
 Native IDE files:
@@ -146,7 +157,94 @@ ide/file_io.c     96 lines
 ide/process.c     95 lines
 ```
 
-The IDE alone is now over **2,100 lines** of C across editor, buffer, console, file I/O, process running, and main window/UI code.
+The native IDE implementation is roughly **1,600 lines** of C across the main window, editor, buffer, console, file I/O, and process runner, with additional header files supporting the subsystem.
+
+---
+
+
+# Memory Management
+
+Nearoh now has a real runtime memory system instead of relying on inconsistent manual ownership.
+
+The current collector is a **non-moving stop-the-world mark-and-sweep garbage collector**. Managed runtime objects are linked into a central heap list and traced from runtime roots.
+
+GC-managed object types currently include:
+
+* Functions
+* Classes
+* Instances
+* Bound methods
+* Lists
+* Dictionaries
+* Heap-allocated environments
+
+The collector includes:
+
+* Object headers with type, mark state, size, and linked-list membership
+* Explicit root marking
+* A gray stack for graph traversal
+* Recursive tracing through object references
+* Environment-chain tracing
+* Sweep logic for unreachable objects
+* Byte accounting and adaptive collection thresholds
+* Safe-point collection after complete top-level statements
+* Optional `NEAROH_GC_STRESS` mode that collects at every safe point
+* Full shutdown cleanup through the same managed-object system
+
+This change fixed one of the most important runtime ownership problems: closures can now safely escape the function that created them because captured environments live on the heap.
+
+Example:
+
+```python
+def outer():
+    x = 42
+
+    def inner():
+        return x
+
+    return inner
+
+f = outer()
+print(f())
+```
+
+Expected output:
+
+```text
+42
+```
+
+Nearoh also preserves shared mutable identity:
+
+```python
+a = [1]
+b = a
+b[0] = 9
+
+print(a)
+```
+
+Expected output:
+
+```text
+[9]
+```
+
+Cyclic containers are supported and reclaimed when unreachable. Printing is cycle-aware, so a self-referential list prints safely instead of recursing forever:
+
+```python
+a = []
+a[0] = a
+print(a)
+```
+
+Expected output:
+
+```text
+[[...]]
+```
+
+The complete regression suite passed with GC stress mode enabled, meaning a full collection occurred after every top-level statement. The suite also passed again after returning to normal threshold-based collection.
 
 ---
 
@@ -358,27 +456,32 @@ Nearoh now has two kinds of regression tests:
    * Must include specific expected error text.
    * These lock down diagnostics and runtime error behavior.
 
-Current custom golden-output pass tests include:
+Current custom pass tests include:
 
 * `arithmetic_precedence.nr`
 * `boolean_short_circuit.nr`
+* `closure_escape.nr`
 * `dict_update_lookup.nr`
 * `for_loop_function_scope.nr`
 * `for_loop_variable_scope.nr`
 * `function_return_chain.nr`
 * `function_scope.nr`
+* `gc_cycle_stress.nr`
 * `list_index_append.nr`
 * `method_return_value.nr`
 * `object_list_mutation.nr`
+* `self_cycle.nr`
+* `shared_list_identity.nr`
 * `two_instances_separate_state.nr`
 * `while_counter.nr`
 
-Current custom expected-failure tests include:
+Current active custom expected-failure tests include:
 
 * `bad_constructor_arg_count.nr`
 * `bad_list_index_out_of_bounds.nr`
 * `bad_undefined_member.nr`
-* `nested_containers.nr`
+
+`nested_containers.nr` remains in the repository as a historical failure case from before nested container assignment support was repaired.
 
 Currently tested behavior includes:
 
@@ -412,6 +515,14 @@ Currently tested behavior includes:
 * Runtime errors inside imported files
 * Missing import path diagnostics
 * Builtin error behavior
+* Escaped closure lifetime
+* Shared list identity
+* Self-referential containers
+* Cycle-safe printing
+* Repeated cyclic garbage creation
+* Live closure preservation across collections
+* Live container preservation across collections
+* Full mark-and-sweep operation under GC stress mode
 
 Expected ending:
 
@@ -584,6 +695,19 @@ Recent cleanup, stabilization, and tooling work included:
 * Added `run_tests.ps1`
 * Added early native Win32/GDI IDE shell
 * Added IDE editor line numbers, console line numbers, toolbar run buttons, console rendering, and click-to-place cursor navigation
+* Replaced inconsistent object ownership with a unified GC-managed heap
+* Added object headers and linked heap tracking
+* Added heap-allocated lexical environments
+* Fixed escaped closures
+* Preserved shared mutable identity for managed objects
+* Added mark, gray-stack trace, and sweep phases
+* Added explicit runtime root handling
+* Added threshold-based collection at safe points
+* Added optional `NEAROH_GC_STRESS` mode
+* Added cycle collection
+* Added cycle-safe printing for recursive lists and dictionaries
+* Added closure, identity, self-cycle, and GC stress regression tests
+* Passed the entire regression suite under both GC stress and normal collection modes
 
 Nearoh now has a stronger foundation for future growth.
 
@@ -601,6 +725,10 @@ Nearoh already includes real runtime behavior:
 * Dynamic lists
 * Dictionaries
 * Scope handling
+* Escaped lexical closures
+* Shared mutable object identity
+* Mark-and-sweep garbage collection
+* Cycle handling
 * Builtins
 * File I/O
 * Imports
@@ -627,7 +755,8 @@ Nearoh is still early, but it is already capable of running meaningful programs 
 * Add more runtime safety checks
 * Improve built-in error behavior
 * Add more standard library utilities
-* Clean up import memory ownership further
+* Continue auditing native allocation accounting
+* Expand temporary-root coverage before allowing collection inside arbitrary expression evaluation
 * Begin designing module namespaces/module objects
 * Expand regression tests
 * Add more example programs
@@ -638,7 +767,7 @@ Nearoh is still early, but it is already capable of running meaningful programs 
 * Namespaced modules
 * Expanded builtins
 * Better performance paths
-* Improved memory systems
+* More detailed GC diagnostics and heap statistics
 * More complete standard library
 * File and path utilities
 * Cleaner automated test workflow
@@ -684,6 +813,6 @@ This project reflects years of programming curiosity, systems experimentation, g
 
 Nearoh is early, active, and growing quickly.
 
-The current stage is centered on strengthening the runtime, improving imports, expanding diagnostics, growing the builtin layer, adding regression tests, and growing the new native IDE from a working shell into a more complete language tool.
+The current stage is centered on strengthening the now-GC-backed runtime, expanding diagnostics and builtins, growing regression coverage, improving import/module architecture, and turning the native IDE from a working shell into a more complete language tool.
 
 Every milestone is focused on turning Nearoh into a real, usable language rather than a superficial prototype.
