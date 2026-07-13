@@ -4,6 +4,7 @@
 #include "lexer.h"
 #include "parser.h"
 #include "module.h"
+#include "gc.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -635,7 +636,11 @@ static FunctionObject* createFunctionObject(Runtime* runtime, AstNode* node) {
         return NULL;
     }
 
-    function = (FunctionObject*)malloc(sizeof(FunctionObject));
+    function = (FunctionObject*)gcAllocateObject(
+        runtime,
+        sizeof(FunctionObject),
+        GC_FUNCTION
+    );
     if (function == NULL) {
         free(nameCopy);
         free(paramsCopy);
@@ -734,7 +739,11 @@ static BoundMethodObject* createBoundMethod(Runtime* runtime, InstanceObject* re
         return NULL;
     }
 
-    boundMethod = (BoundMethodObject*)malloc(sizeof(BoundMethodObject));
+    boundMethod = (BoundMethodObject*)gcAllocateObject(
+        runtime,
+        sizeof(BoundMethodObject),
+        GC_BOUND_METHOD
+    );
     if (boundMethod == NULL) {
         runtimeError(runtime, "Out of memory while creating bound method.");
         return NULL;
@@ -761,7 +770,11 @@ static ClassObject* createClassObject(Runtime* runtime, AstNode* node) {
         return NULL;
     }
 
-    classObject = (ClassObject*)malloc(sizeof(ClassObject));
+    classObject = (ClassObject*)gcAllocateObject(
+        runtime,
+        sizeof(ClassObject),
+        GC_CLASS
+    );
     if (classObject == NULL) {
         free(nameCopy);
         runtimeError(runtime, "Out of memory while creating class.");
@@ -802,7 +815,11 @@ static InstanceObject* createInstanceObject(Runtime* runtime, ClassObject* class
         return NULL;
     }
 
-    instance = (InstanceObject*)malloc(sizeof(InstanceObject));
+    instance = (InstanceObject*)gcAllocateObject(
+        runtime,
+        sizeof(InstanceObject),
+        GC_INSTANCE
+    );
     if (instance == NULL) {
         runtimeError(runtime, "Out of memory while creating instance.");
         return NULL;
@@ -962,69 +979,55 @@ static Value* evaluateArguments(Runtime* runtime, AstNodeArray* arguments, int* 
 }
 
 static Value callUserFunction(Runtime* runtime, FunctionObject* function, int argCount, Value* args) {
-    Environment localEnv;
+    Environment* localEnv;
     Environment* previousEnv;
     ExecResult result;
     Value returnValue;
     int i;
-
     if (function == NULL) {
         runtimeError(runtime, "Tried to call a null function.");
         return makeNone();
     }
-
     if (argCount != function->paramCount) {
         runtimeError(runtime, "Wrong number of arguments for function call.");
         return makeNone();
     }
-
-    envInit(&localEnv, function->closure);
+    localEnv = createEnvironment(runtime, function->closure);
+    if (localEnv == NULL) {
+        runtimeError(runtime, "Out of memory while creating function environment.");
+        return makeNone();
+    }
     previousEnv = runtime->current;
-    runtime->current = &localEnv;
-
+    runtime->current = localEnv;
     for (i = 0; i < function->paramCount; i++) {
         char* paramName = copyTokenText(function->params[i]);
         if (paramName == NULL) {
             runtime->current = previousEnv;
-            envFree(&localEnv);
             runtimeError(runtime, "Out of memory while binding function parameter.");
             return makeNone();
         }
-
         if (!envDefine(runtime->current, paramName, args[i])) {
             free(paramName);
             runtime->current = previousEnv;
-            envFree(&localEnv);
             runtimeError(runtime, "Failed to bind function parameter.");
             return makeNone();
         }
-
         free(paramName);
     }
-
     result = runtimeExecuteNode(runtime, function->body);
-
     runtime->current = previousEnv;
-
     if (result.type == FLOW_RETURN) {
         returnValue = copyValue(&result.value);
         freeValue(&result.value);
-        envFree(&localEnv);
         return returnValue;
     }
-
     if (result.type == FLOW_ERROR) {
-        envFree(&localEnv);
         return makeNone();
     }
-
     if (result.type == FLOW_BREAK || result.type == FLOW_CONTINUE) {
-        envFree(&localEnv);
         runtimeError(runtime, "break/continue used outside of loop.");
         return makeNone();
     }
-
-    envFree(&localEnv);
     return makeNone();
 }
 
@@ -1148,7 +1151,6 @@ static Value evalCall(Runtime* runtime, AstNode* node) {
                 initResult = callBoundMethod(runtime, boundInit, argCount, args);
 
                 freeValue(&initResult);
-                free(boundInit);
 
                 if (runtime->hadError) {
                     freeValue(&result);
@@ -2023,6 +2025,16 @@ void runtimeInit(Runtime* runtime) {
     runtime->fileStack = NULL;
     runtime->fileStackCount = 0;
     runtime->fileStackCapacity = 0;
+    runtime->objects = NULL;
+    runtime->bytesAllocated = 0;
+    runtime->nextGc = 16 * 1024;
+    runtime->grayStack = NULL;
+    runtime->grayCount = 0;
+    runtime->grayCapacity = 0;
+    runtime->tempRoots = NULL;
+    runtime->tempRootCount = 0;
+    runtime->tempRootCapacity = 0;
+
 
     registerBuiltins(&runtime->globals);
 }
@@ -2052,6 +2064,19 @@ void runtimeFree(Runtime* runtime) {
     envFree(&runtime->globals);
     freeImportedModules(runtime);
     freeFileStack(runtime);
+    
+    gcFreeAllObjects(runtime);
+    free(runtime->grayStack);
+    runtime->grayStack = NULL;
+    runtime->grayCount = 0;
+    runtime->grayCapacity = 0;
+    free(runtime->tempRoots);
+    runtime->tempRoots = NULL;
+    runtime->tempRootCount = 0;
+    runtime->tempRootCapacity = 0;
+    runtime->objects = NULL;
+    runtime->bytesAllocated = 0;
+    runtime->nextGc = 0;
     runtime->current = NULL;
 }
 
@@ -2203,7 +2228,7 @@ Value runtimeEvalExpression(Runtime* runtime, AstNode* node) {
             ListObject* list;
             int i;
 
-            list = createListObject();
+            list = createListObject(runtime);
             if (list == NULL) {
                 runtimeError(runtime, "Out of memory while creating list.");
                 return makeNone();
@@ -2248,7 +2273,7 @@ Value runtimeEvalExpression(Runtime* runtime, AstNode* node) {
             DictObject* dict;
             int i;
 
-            dict = createDictObject();
+            dict = createDictObject(runtime);
             if (dict == NULL) {
                 runtimeError(runtime, "Out of memory while creating dictionary.");
                 return makeNone();
@@ -2307,9 +2332,23 @@ ExecResult runtimeExecuteNode(Runtime* runtime, AstNode* node) {
     switch (node->type) {
         case AST_MODULE:
             for (i = 0; i < node->as.module.statements.count; i++) {
-                result = runtimeExecuteNode(runtime, node->as.module.statements.items[i]);
+                result = runtimeExecuteNode(
+                    runtime,
+                    node->as.module.statements.items[i]
+                );
                 if (result.type != FLOW_NORMAL) {
                     return result;
+                }
+                /*
+                    Only collect when execution has returned completely to the
+                    global environment. This is a safe point: no unfinished
+                    expression owns the sole reference to a temporary object.
+                */
+                if (runtime->current == &runtime->globals) {
+                    gcSafePoint(runtime);
+                    if (runtime->hadError) {
+                        return execError();
+                    }
                 }
             }
             return execNormal();
@@ -2480,3 +2519,14 @@ ExecResult runtimeExecuteNode(Runtime* runtime, AstNode* node) {
             return execError();
     }
 }
+
+
+
+
+
+
+
+
+
+
+

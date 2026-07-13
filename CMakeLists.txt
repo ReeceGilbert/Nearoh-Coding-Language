@@ -10,6 +10,7 @@ set(SOURCES
         ast.c
         runtime.c
         value.c
+        gc.c
         env.c
         builtins.c
 )
@@ -20,6 +21,7 @@ set(HEADERS
         ast.h
         runtime.h
         value.h
+        gc.h
         env.h
         builtins.h
         token.h
@@ -29,3 +31,4 @@ add_executable(nearoh
         ${SOURCES}
         ${HEADERS}
 )
+

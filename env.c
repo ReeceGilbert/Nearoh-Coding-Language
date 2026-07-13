@@ -1,4 +1,5 @@
 #include "env.h"
+#include "gc.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -64,6 +65,19 @@ void envInit(Environment* env, Environment* parent) {
     env->bindings = NULL;
     env->count = 0;
     env->capacity = 0;
+}
+Environment* createEnvironment(Runtime* runtime, Environment* parent) {
+    Environment* env;
+    env = (Environment*)gcAllocateObject(
+        runtime,
+        sizeof(Environment),
+        GC_ENVIRONMENT
+    );
+    if (env == NULL) {
+        return NULL;
+    }
+    envInit(env, parent);
+    return env;
 }
 
 void envFree(Environment* env) {
@@ -212,3 +226,4 @@ int envExistsInCurrent(const Environment* env, const char* name) {
 
     return 0;
 }
+

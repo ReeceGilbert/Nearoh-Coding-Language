@@ -1,30 +1,24 @@
 #ifndef ENV_H
 #define ENV_H
-
 #include "value.h"
-
 typedef struct {
     char* name;
     Value value;
 } Binding;
-
 typedef struct Environment {
+    GcObject gc;
     struct Environment* parent;
     Binding* bindings;
     int count;
     int capacity;
 } Environment;
-
 void envInit(Environment* env, Environment* parent);
+Environment* createEnvironment(Runtime* runtime, Environment* parent);
 void envFree(Environment* env);
-
 int envDefine(Environment* env, const char* name, Value value);
 int envAssign(Environment* env, const char* name, Value value);
 int envAssignCurrent(Environment* env, const char* name, Value value);
-
 int envGet(const Environment* env, const char* name, Value* outValue);
 Value* envGetRef(Environment* env, const char* name);
-
 int envExistsInCurrent(const Environment* env, const char* name);
-
 #endif

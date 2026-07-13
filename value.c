@@ -1,4 +1,5 @@
 #include "value.h"
+#include "gc.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -125,8 +126,12 @@ static void freeDictObject(DictObject* dict) {
 // LISTS
 // ------------------------------------------------------------
 
-ListObject* createListObject(void) {
-    ListObject* list = (ListObject*)malloc(sizeof(ListObject));
+ListObject* createListObject(Runtime* runtime) {
+    ListObject* list = (ListObject*)gcAllocateObject(
+        runtime,
+        sizeof(ListObject),
+        GC_LIST
+    );
 
     if (list == NULL) {
         return NULL;
@@ -158,8 +163,12 @@ int listAppend(ListObject* list, Value value) {
 // DICTIONARIES
 // ------------------------------------------------------------
 
-DictObject* createDictObject(void) {
-    DictObject* dict = (DictObject*)malloc(sizeof(DictObject));
+DictObject* createDictObject(Runtime* runtime) {
+    DictObject* dict = (DictObject*)gcAllocateObject(
+        runtime,
+        sizeof(DictObject),
+        GC_DICT
+    );
 
     if (dict == NULL) {
         return NULL;
@@ -334,15 +343,9 @@ void freeValue(Value* value) {
         case VAL_STRING:
             free(value->as.string);
             value->as.string = NULL;
-            break;
-
-        case VAL_LIST:
-            freeListObject(value->as.list);
+            break;        case VAL_LIST:
             value->as.list = NULL;
-            break;
-
-        case VAL_DICT:
-            freeDictObject(value->as.dict);
+            break;        case VAL_DICT:
             value->as.dict = NULL;
             break;
 
@@ -384,58 +387,10 @@ Value copyValue(const Value* value) {
             return makeInstance(value->as.instance);
 
         case VAL_BOUND_METHOD:
-            return makeBoundMethod(value->as.boundMethod);
-
-        case VAL_LIST: {
-            ListObject* source = value->as.list;
-            ListObject* copy;
-            int i;
-
-            if (source == NULL) {
-                return makeList(NULL);
-            }
-
-            copy = createListObject();
-
-            if (copy == NULL) {
-                return makeNone();
-            }
-
-            for (i = 0; i < source->count; i++) {
-                if (!listAppend(copy, source->items[i])) {
-                    freeListObject(copy);
-                    return makeNone();
-                }
-            }
-
-            return makeList(copy);
-        }
-
-        case VAL_DICT: {
-            DictObject* source = value->as.dict;
-            DictObject* copy;
-            int i;
-
-            if (source == NULL) {
-                return makeDict(NULL);
-            }
-
-            copy = createDictObject();
-
-            if (copy == NULL) {
-                return makeNone();
-            }
-
-            for (i = 0; i < source->count; i++) {
-                if (!dictSet(copy, source->entries[i].key, source->entries[i].value)) {
-                    freeDictObject(copy);
-                    return makeNone();
-                }
-            }
-
-            return makeDict(copy);
-        }
-
+            return makeBoundMethod(value->as.boundMethod);        case VAL_LIST:
+            return makeList(value->as.list);
+        case VAL_DICT:
+            return makeDict(value->as.dict);
         default:
             return makeNone();
     }
@@ -577,31 +532,29 @@ const char* valueTypeName(const Value* value) {
     }
 }
 
-void printValue(const Value* value) {
+static void printValueInternal(
+    const Value* value,
+    const GcObject** activeObjects,
+    int activeCount
+) {
     int i;
-
     if (value == NULL) {
         printf("none");
         return;
     }
-
     switch (value->type) {
         case VAL_NONE:
             printf("none");
             break;
-
         case VAL_BOOL:
             printf("%s", value->as.boolean ? "true" : "false");
             break;
-
         case VAL_NUMBER:
             printf("%g", value->as.number);
             break;
-
         case VAL_STRING:
             printf("%s", value->as.string ? value->as.string : "");
             break;
-
         case VAL_NATIVE_FUNCTION:
             if (value->as.nativeFunction != NULL &&
                 value->as.nativeFunction->name != NULL) {
@@ -610,7 +563,6 @@ void printValue(const Value* value) {
                 printf("<native fn>");
             }
             break;
-
         case VAL_FUNCTION:
             if (value->as.function != NULL &&
                 value->as.function->name != NULL) {
@@ -619,7 +571,6 @@ void printValue(const Value* value) {
                 printf("<fn>");
             }
             break;
-
         case VAL_CLASS:
             if (value->as.classObject != NULL &&
                 value->as.classObject->name != NULL) {
@@ -628,7 +579,6 @@ void printValue(const Value* value) {
                 printf("<class>");
             }
             break;
-
         case VAL_INSTANCE:
             if (value->as.instance != NULL &&
                 value->as.instance->classObject != NULL &&
@@ -638,59 +588,100 @@ void printValue(const Value* value) {
                 printf("<instance>");
             }
             break;
-
         case VAL_BOUND_METHOD:
             if (value->as.boundMethod != NULL &&
                 value->as.boundMethod->method != NULL &&
                 value->as.boundMethod->method->name != NULL) {
-                printf("<bound method %s>", value->as.boundMethod->method->name);
+                printf(
+                    "<bound method %s>",
+                    value->as.boundMethod->method->name
+                );
             } else {
                 printf("<bound method>");
             }
             break;
-
-        case VAL_LIST:
+        case VAL_LIST: {
+            const GcObject* object = (const GcObject*)value->as.list;
+            const GcObject* nextActive[256];
             if (value->as.list == NULL) {
                 printf("[]");
                 break;
             }
-
+            for (i = 0; i < activeCount; i++) {
+                if (activeObjects[i] == object) {
+                    printf("[...]");
+                    return;
+                }
+            }
+            if (activeCount >= 256) {
+                printf("[...]");
+                return;
+            }
+            for (i = 0; i < activeCount; i++) {
+                nextActive[i] = activeObjects[i];
+            }
+            nextActive[activeCount] = object;
             printf("[");
-
             for (i = 0; i < value->as.list->count; i++) {
                 if (i > 0) {
                     printf(", ");
                 }
-
-                printValue(&value->as.list->items[i]);
+                printValueInternal(
+                    &value->as.list->items[i],
+                    nextActive,
+                    activeCount + 1
+                );
             }
-
             printf("]");
             break;
-
-        case VAL_DICT:
+        }
+        case VAL_DICT: {
+            const GcObject* object = (const GcObject*)value->as.dict;
+            const GcObject* nextActive[256];
             if (value->as.dict == NULL) {
                 printf("{}");
                 break;
             }
-
+            for (i = 0; i < activeCount; i++) {
+                if (activeObjects[i] == object) {
+                    printf("{...}");
+                    return;
+                }
+            }
+            if (activeCount >= 256) {
+                printf("{...}");
+                return;
+            }
+            for (i = 0; i < activeCount; i++) {
+                nextActive[i] = activeObjects[i];
+            }
+            nextActive[activeCount] = object;
             printf("{");
-
             for (i = 0; i < value->as.dict->count; i++) {
                 if (i > 0) {
                     printf(", ");
                 }
-
-                printValue(&value->as.dict->entries[i].key);
+                printValueInternal(
+                    &value->as.dict->entries[i].key,
+                    nextActive,
+                    activeCount + 1
+                );
                 printf(": ");
-                printValue(&value->as.dict->entries[i].value);
+                printValueInternal(
+                    &value->as.dict->entries[i].value,
+                    nextActive,
+                    activeCount + 1
+                );
             }
-
             printf("}");
             break;
-
+        }
         default:
             printf("<unknown>");
             break;
     }
+}
+void printValue(const Value* value) {
+    const GcObject* activeObjects[256];
+    printValueInternal(value, activeObjects, 0);
 }

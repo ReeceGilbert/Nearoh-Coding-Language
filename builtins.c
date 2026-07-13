@@ -165,7 +165,7 @@ static Value builtinAppend(Runtime* runtime, int argCount, Value* args) {
         return makeNone();
     }
 
-    result = createListObject();
+    result = createListObject(runtime);
     if (result == NULL) {
         runtimeError(runtime, "Out of memory while creating appended list.");
         return makeNone();
@@ -210,7 +210,7 @@ static Value builtinRange(Runtime* runtime, int argCount, Value* args) {
         return makeNone();
     }
 
-    result = createListObject();
+    result = createListObject(runtime);
     if (result == NULL) {
         runtimeError(runtime, "Out of memory while creating range list.");
         return makeNone();
@@ -248,7 +248,7 @@ static Value builtinKeys(Runtime* runtime, int argCount, Value* args) {
         return makeNone();
     }
 
-    result = createListObject();
+    result = createListObject(runtime);
     if (result == NULL) {
         runtimeError(runtime, "Out of memory while creating keys list.");
         return makeNone();
@@ -639,7 +639,7 @@ static Value builtinValues(Runtime* runtime, int argCount, Value* args) {
         return makeNone();
     }
 
-    result = createListObject();
+    result = createListObject(runtime);
     if (result == NULL) {
         runtimeError(runtime, "Out of memory while creating values list.");
         return makeNone();
@@ -872,7 +872,7 @@ static Value builtinSplit(Runtime* runtime, int argCount, Value* args) {
         return makeNone();
     }
 
-    result = createListObject();
+    result = createListObject(runtime);
     if (result == NULL) {
         runtimeError(runtime, "Out of memory while creating split list.");
         return makeNone();

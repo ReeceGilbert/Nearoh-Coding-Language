@@ -1,11 +1,10 @@
 #ifndef RUNTIME_H
 #define RUNTIME_H
-
+#include <stddef.h>
 #include "ast.h"
 #include "env.h"
 #include "value.h"
 #include "module.h"
-
 typedef enum {
     FLOW_NORMAL,
     FLOW_RETURN,
@@ -13,20 +12,16 @@ typedef enum {
     FLOW_CONTINUE,
     FLOW_ERROR
 } FlowType;
-
 typedef struct {
     FlowType type;
     Value value;
 } ExecResult;
-
 /*
     ImportedModule stays private in runtime.c.
-
     Runtime only stores an opaque pointer array here so runtime.h does not
     need to know about TokenArray, Diagnostics, lexer.h, or parser.h.
 */
 typedef struct ImportedModule ImportedModule;
-
 typedef struct Runtime {
     Environment globals;
     Environment* current;
@@ -35,29 +30,35 @@ typedef struct Runtime {
     int errorLine;
     int errorColumn;
     char errorMessage[256];
-
     ImportedModule* imports;
     int importCount;
     int importCapacity;
-
     char** fileStack;
     int fileStackCount;
     int fileStackCapacity;
+    /*
+        Garbage collector state.
+        These fields are added before GC allocation is activated so the
+        migration can happen in controlled stages.
+    */
+    GcObject* objects;
+    size_t bytesAllocated;
+    size_t nextGc;
+    GcObject** grayStack;
+    int grayCount;
+    int grayCapacity;
+    Value* tempRoots;
+    int tempRootCount;
+    int tempRootCapacity;
 } Runtime;
-
 void runtimeInit(Runtime* runtime);
 void runtimeFree(Runtime* runtime);
-
 int runtimeSetEntryPath(Runtime* runtime, const char* path);
-
 void runtimeError(Runtime* runtime, const char* message);
 void runtimeErrorAt(Runtime* runtime, const AstNode* node, const char* message);
-
 ExecResult execNormal(void);
 ExecResult execError(void);
 ExecResult execReturn(Value value);
-
 Value runtimeEvalExpression(Runtime* runtime, AstNode* node);
 ExecResult runtimeExecuteNode(Runtime* runtime, AstNode* node);
-
 #endif
